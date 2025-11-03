@@ -29,7 +29,9 @@ func (ce *cmdExec) Run() error {
 		for {
 			n, err := outR.Read(buf)
 			if n > 0 {
-				ce.notifyProg.Send(cmdOutput{data: buf[:n]})
+				d := make([]byte, len(buf[:n]))
+				copy(d, buf[:n])
+				ce.notifyProg.Send(cmdOutput{data: d, stderr: false})
 			}
 			if err != nil {
 				return
@@ -41,7 +43,9 @@ func (ce *cmdExec) Run() error {
 		for {
 			n, err := errR.Read(buf)
 			if n > 0 {
-				ce.notifyProg.Send(cmdOutput{data: buf[:n], stderr: true})
+				d := make([]byte, len(buf[:n]))
+				copy(d, buf[:n])
+				ce.notifyProg.Send(cmdOutput{data: d, stderr: true})
 			}
 			if err != nil {
 				return
