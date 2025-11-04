@@ -128,7 +128,7 @@ func (e *Executor) CurrentStepCmd(ctx context.Context) (*Cmd, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create outputs dir: %w", err)
 	}
-	outputFile := outputDir + "/outputs.env"
+	outputFile := filepath.Join(outputDir, "outputs.env")
 	cmd.Env = append(cmd.Env, fmt.Sprintf("OUTPUT=%s", outputFile))
 	return &Cmd{
 		Cmd:        cmd,
