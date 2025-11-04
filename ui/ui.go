@@ -84,7 +84,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
 	// Handle window resizes first and always to get the latest dimensions for all subsequent updates
-	if msg, isSizeMsg := msg.(tea.WindowSizeMsg); isSizeMsg && m.uiState != uiStateInitializing {
+	if msg, isSizeMsg := msg.(tea.WindowSizeMsg); isSizeMsg {
 		m.height = msg.Height
 		m.width = msg.Width
 	}
@@ -93,9 +93,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case uiStateInitializing:
 		switch msg := msg.(type) {
 		case tea.WindowSizeMsg:
-			m.height = msg.Height
-			m.width = msg.Width
-
 			// Since this program is using the full size of the viewport we
 			// need to wait until we've received the window dimensions before
 			// we can initialize the viewport. The initial dimensions come in
