@@ -166,7 +166,7 @@ func (e *Executor) CurrentStepCmd(ctx context.Context) (*Cmd, error) {
 	cmd.Env = os.Environ()
 	outputs := e.StateManager.Outputs()
 	for _, input := range matchedStep.MatchedStep.Inputs {
-		cmd.Env = append(cmd.Env, fmt.Sprintf("INPUT_%s=%s", input.Name, outputs[input.Name]))
+		cmd.Env = append(cmd.Env, fmt.Sprintf("INPUT_%s=%s", input.Name, outputs[input.Name].Value))
 	}
 	for k, v := range matchedStep.NamedMatches {
 		cmd.Env = append(cmd.Env, fmt.Sprintf("MATCH_%s=%s", k, v))
