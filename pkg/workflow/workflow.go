@@ -15,6 +15,9 @@ func UnmarshalWorkflow(raw []byte) (Workflow, error) {
 		if len(part) == 0 {
 			continue
 		}
+		if bytes.HasPrefix(part, []byte("#")) {
+			continue
+		}
 		workflow.Steps = append(workflow.Steps, string(part))
 	}
 	return workflow, nil
