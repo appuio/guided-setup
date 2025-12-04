@@ -66,7 +66,7 @@ type model struct {
 
 	overlayVarInput varInputModel
 
-	cmdOuputViewport viewport.Model
+	cmdOutputViewport viewport.Model
 
 	height int
 	width  int
@@ -98,7 +98,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// we can initialize the viewport. The initial dimensions come in
 			// quickly, though asynchronously, which is why we wait for them
 			// here.
-			m.cmdOuputViewport = viewport.New(msg.Width, m.calculateViewportHeight())
+			m.cmdOutputViewport = viewport.New(msg.Width, m.calculateViewportHeight())
 			m.uiState = uiStateStep
 		}
 	case uiStateInputOverlay:
@@ -159,8 +159,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Quit
 			}
 			if k == "enter" && (m.cmdState == cmdStateIdle || (m.cmdState == cmdStateFinished && m.cmdErr != nil)) {
-				m.cmdOuputViewport.SetContent("")
-				m.cmdOuputViewport.GotoTop()
+				m.cmdOutputViewport.SetContent("")
+				m.cmdOutputViewport.GotoTop()
 				var cmd tea.Cmd
 				m, cmd = m.runCmd()
 				cmds = append(cmds, cmd)
@@ -170,8 +170,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if err == io.EOF {
 					return m, tea.Quit
 				}
-				m.cmdOuputViewport.SetContent("")
-				m.cmdOuputViewport.GotoTop()
+				m.cmdOutputViewport.SetContent("")
+				m.cmdOutputViewport.GotoTop()
 				m.cmdState = cmdStateIdle
 				m.cmdErr = nil
 				m.cmdOutput = nil
@@ -193,8 +193,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				linesWithoutCarriageReturn = append(linesWithoutCarriageReturn, string(nl))
 			}
-			m.cmdOuputViewport.SetContent(strings.Join(linesWithoutCarriageReturn, "\n"))
-			m.cmdOuputViewport.GotoBottom()
+			m.cmdOutputViewport.SetContent(strings.Join(linesWithoutCarriageReturn, "\n"))
+			m.cmdOutputViewport.GotoBottom()
 		case cmdFinished:
 			m.cmdState = cmdStateFinished
 			m.cmdErr = msg.err
@@ -205,11 +205,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Step height is dynamic, so we need to update the viewport size after each update.
 		// We do it right before updating the viewport to ensure most up-to-date dimensions.
 		if m.uiState != uiStateInitializing {
-			m.cmdOuputViewport.Width = m.width
-			m.cmdOuputViewport.Height = m.calculateViewportHeight()
+			m.cmdOutputViewport.Width = m.width
+			m.cmdOutputViewport.Height = m.calculateViewportHeight()
 		}
 		var cmd tea.Cmd
-		m.cmdOuputViewport, cmd = m.cmdOuputViewport.Update(msg)
+		m.cmdOutputViewport, cmd = m.cmdOutputViewport.Update(msg)
 		cmds = append(cmds, cmd)
 	}
 
@@ -229,8 +229,8 @@ func (m model) runCmd() (model, tea.Cmd) {
 		m.cmdOutput = &strings.Builder{}
 	}
 	m.cmdOutput.Reset()
-	m.cmdOuputViewport.SetContent("")
-	m.cmdOuputViewport.GotoTop()
+	m.cmdOutputViewport.SetContent("")
+	m.cmdOutputViewport.GotoTop()
 
 	cmd, err := m.executor.CurrentStepCmd(context.Background())
 	if err != nil {
@@ -248,7 +248,7 @@ func (m model) runCmd() (model, tea.Cmd) {
 
 func (m model) View() string {
 	baseLayer := func() string {
-		return lipgloss.JoinVertical(lipgloss.Left, m.headerView(), m.stepView(), m.cmdOuputViewport.View(), m.footerView())
+		return lipgloss.JoinVertical(lipgloss.Left, m.headerView(), m.stepView(), m.cmdOutputViewport.View(), m.footerView())
 	}
 
 	switch m.uiState {
