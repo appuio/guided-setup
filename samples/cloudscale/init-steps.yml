@@ -575,7 +575,10 @@ steps:
     echo "@  Waiting for record to propagate...                                                   @"
     echo "@                                                                                       @"
     echo "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@"
-    while ! host "api.${INPUT_cluster_domain}" ; do ; sleep 15 ; done
+    while ! (host "api.${INPUT_cluster_domain}")
+    do
+      sleep 15
+    done
     echo "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@"
     echo "@                                                                                       @"
     echo "@  Please review and merge the LB hieradata MR listed in Terraform output hieradata_mr. @"
