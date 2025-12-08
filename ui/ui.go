@@ -141,10 +141,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							}
 						}
 						if selectedVar != "" {
-							m.overlayVarInput.varName = selectedVar
-							m.uiState = uiStateInputOverlay
-							m.overlayVarInput.textInput.SetValue(m.executor.StateManager.Outputs()[selectedVar].Value)
-							cmds = append(cmds, m.overlayVarInput.textInput.Focus())
+							var cmd tea.Cmd
+							m, cmd = m.openInputOverlay(selectedVar)
+							cmds = append(cmds, cmd)
 						}
 					}
 				}
@@ -158,7 +157,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if k == "ctrl+c" || k == "q" {
 				return m, tea.Quit
 			}
-			if k == "enter" && (m.cmdState == cmdStateIdle || (m.cmdState == cmdStateFinished && m.cmdErr != nil)) {
+			if k == "enter" && len(m.emptyInputs()) > 0 {
+				// edit first empty input
+				emptyInputs := m.emptyInputs()
+				var cmd tea.Cmd
+				m, cmd = m.openInputOverlay(emptyInputs[0])
+				cmds = append(cmds, cmd)
+			} else if k == "enter" && (m.cmdState == cmdStateIdle || (m.cmdState == cmdStateFinished && m.cmdErr != nil)) {
 				m.cmdOutputViewport.SetContent("")
 				m.cmdOutputViewport.GotoTop()
 				var cmd tea.Cmd
@@ -244,6 +249,29 @@ func (m model) runCmd() (model, tea.Cmd) {
 	return m, func() tea.Msg {
 		return cmdFinished{err: ce.Run()}
 	}
+}
+
+func (m model) emptyInputs() []string {
+	var empty []string
+
+	_, _, step, err := m.executor.CurrentStep()
+	if err != nil {
+		return empty
+	}
+	stateOutputs := m.executor.StateManager.Outputs()
+	for _, input := range step.MatchedStep.Inputs {
+		if val := stateOutputs[input.Name]; val.Value == "" {
+			empty = append(empty, input.Name)
+		}
+	}
+	return empty
+}
+
+func (m model) openInputOverlay(varName string) (model, tea.Cmd) {
+	m.overlayVarInput.varName = varName
+	m.uiState = uiStateInputOverlay
+	m.overlayVarInput.textInput.SetValue(m.executor.StateManager.Outputs()[varName].Value)
+	return m, m.overlayVarInput.textInput.Focus()
 }
 
 func (m model) View() string {
@@ -391,7 +419,11 @@ func (m model) footerView() string {
 	case uiStateStep:
 		switch m.cmdState {
 		case cmdStateIdle:
-			help = infoStyleLeft.Render("enter: run • e: edit • q: quit")
+			if len(m.emptyInputs()) > 0 {
+				help = infoStyleLeft.Render("enter: edit empty input • e: edit • q: quit")
+			} else {
+				help = infoStyleLeft.Render("enter: run • e: edit • q: quit")
+			}
 		case cmdStateRunning:
 			help = infoStyleLeft.Render("q: quit")
 		case cmdStateFinished:
@@ -487,10 +519,10 @@ func NewUI(exc *executor.Executor) *tea.Program {
 	p := tea.NewProgram(
 		m,
 		tea.WithAltScreen(), // use the full size of the terminal in its "alternate screen buffer"
-		// Disableing the mouse support allows the clickable links in the output to work on MacOS Terminal.app
+		// Disabling the mouse support allows the clickable links in the output to work on MacOS Terminal.app
 		// tea.WithMouseCellMotion(), // turn on mouse support so we can track the mouse wheel
 	)
-	// Store a reference to the program in the model, we use it for async IO updates
+	// Used to send async IO updates from cmdExec to the UI
 	m.program = p
 
 	return p
