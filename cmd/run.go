@@ -84,7 +84,12 @@ func (ro *runOptions) Run(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to prepare executor: %w", err)
 	}
 
-	if _, err := ui.NewUI(executor).Run(); err != nil {
+	ui, err := ui.NewUI(executor)
+	if err != nil {
+		return fmt.Errorf("failed to create UI: %w", err)
+	}
+
+	if _, err := ui.Run(); err != nil {
 		return fmt.Errorf("failed to start UI: %w", err)
 	}
 

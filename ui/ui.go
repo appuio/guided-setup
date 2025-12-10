@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/appuio/guided-setup/pkg/executor"
+	"github.com/appuio/guided-setup/pkg/log"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -74,6 +75,8 @@ type model struct {
 	spinner spinner.Model
 
 	program *tea.Program
+
+	logger *log.Logger
 }
 
 func (m model) Init() tea.Cmd {
@@ -112,6 +115,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if k := msg.String(); k == "esc" || k == "enter" {
 				if k == "enter" {
 					m.executor.StateManager.SetOutput(m.overlayVarInput.varName, m.overlayVarInput.textInput.Value())
+					m.logger.VariableChange(m.overlayVarInput.varName, m.overlayVarInput.origValue, m.overlayVarInput.textInput.Value())
 				}
 				m.uiState = uiStateStep
 				m.varSelectIdx = ""
@@ -155,7 +159,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			k := msg.String()
 
 			if k == "ctrl+c" || k == "q" {
-				return m, tea.Quit
+				return m.quit()
 			}
 			if k == "enter" && len(m.emptyInputs()) > 0 {
 				// edit first empty input
@@ -172,10 +176,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				cmds = append(cmds, cmd)
 			}
 			if k == "n" || k == "enter" && m.cmdState == cmdStateFinished && m.cmdErr == nil {
-				_, _, _, err := m.executor.NextStep()
+				_, currentStep, _, _ := m.executor.CurrentStep()
+				_, nextStep, _, err := m.executor.NextStep()
 				if err == io.EOF {
-					return m, tea.Quit
+					return m.quit()
 				}
+				m.logger.StepChange(currentStep, nextStep)
 				m.cmdOutputViewport.SetContent("")
 				m.cmdOutputViewport.GotoTop()
 				m.cmdState = cmdStateIdle
@@ -202,6 +208,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.cmdOutputViewport.SetContent(strings.Join(linesWithoutCarriageReturn, "\n"))
 			m.cmdOutputViewport.GotoBottom()
 		case cmdFinished:
+			_, currentStep, step, _ := m.executor.CurrentStep()
+			inputs := make(map[string]string)
+			for _, input := range step.MatchedStep.Inputs {
+				inputs[input.Name] = m.executor.StateManager.Outputs()[input.Name].Value
+			}
+			outputs := make(map[string]string)
+			for _, output := range step.MatchedStep.Outputs {
+				outputs[output.Name] = m.executor.StateManager.Outputs()[output.Name].Value
+			}
+			m.logger.CommandFinished(currentStep, inputs, outputs, m.cmdOutput.String(), msg.err)
 			m.cmdState = cmdStateFinished
 			m.cmdErr = msg.err
 		}
@@ -282,8 +298,14 @@ func (m model) openInputOverlay(varName string) (model, tea.Cmd) {
 	m.overlayVarInput.varName = varName
 	m.overlayVarInput.description = description
 	m.uiState = uiStateInputOverlay
-	m.overlayVarInput.textInput.SetValue(m.executor.StateManager.Outputs()[varName].Value)
+	m.overlayVarInput.origValue = m.executor.StateManager.Outputs()[varName].Value
+	m.overlayVarInput.textInput.SetValue(m.overlayVarInput.origValue)
 	return m, m.overlayVarInput.textInput.Focus()
+}
+
+func (m model) quit() (model, tea.Cmd) {
+	m.logger.Close()
+	return m, tea.Quit
 }
 
 func (m model) View() string {
@@ -521,8 +543,13 @@ func max(a, b int) int {
 	return b
 }
 
-func NewUI(exc *executor.Executor) *tea.Program {
+func NewUI(exc *executor.Executor) (*tea.Program, error) {
+	l, err := log.NewLogger("ui-log.txt")
+	if err != nil {
+		return nil, fmt.Errorf("failed to create UI logger: %w", err)
+	}
 	m := &model{
+		logger:          l,
 		executor:        exc,
 		overlayVarInput: newVarInputModel(),
 	}
@@ -537,7 +564,7 @@ func NewUI(exc *executor.Executor) *tea.Program {
 	// Used to send async IO updates from cmdExec to the UI
 	m.program = p
 
-	return p
+	return p, nil
 }
 
 const nbsp = '\u00A0'

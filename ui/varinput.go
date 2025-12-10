@@ -10,6 +10,7 @@ type varInputModel struct {
 	textInput   textinput.Model
 	varName     string
 	description string
+	origValue   string
 }
 
 func newVarInputModel() varInputModel {
