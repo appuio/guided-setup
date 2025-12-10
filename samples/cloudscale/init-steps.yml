@@ -587,10 +587,15 @@ steps:
     done
 
     terraform apply -auto-approve
+    dnstmp=$(mktemp)
+    terraform output -raw cluster_dns > "$dnstmp"
     echo "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@"
     echo "@                                                                                       @"
     echo "@  Please add the DNS records shown in the Terraform output to your DNS provider.       @"
     echo "@  Most probably in https://git.vshn.net/vshn/vshn_zonefiles                            @"
+    echo "@                                                                                       @"
+    echo "@  If terminal selection does not work the entries can also be copied from              @"
+    echo "@    $dnstmp                                                                            @"
     echo "@                                                                                       @"
     echo "@  Waiting for record to propagate...                                                   @"
     echo "@                                                                                       @"
@@ -599,6 +604,7 @@ steps:
     do
       sleep 15
     done
+    rm -f "$dnstmp"
 
     lb1=$(terraform state show "module.cluster.module.lb.cloudscale_server.lb[0]" | grep fqdn | awk '{print $2}' | tr -d ' "\r\n')
     lb2=$(terraform state show "module.cluster.module.lb.cloudscale_server.lb[1]" | grep fqdn | awk '{print $2}' | tr -d ' "\r\n')
