@@ -152,34 +152,34 @@ func (e *Executor) Prepare() error {
 	return nil
 }
 
-func (e *Executor) CurrentStep() (i int, name string, matchedStep Step, err error) {
+func (e *Executor) CurrentStep() (i int, matchedStep Step, err error) {
 	currentWFStep := e.Workflow.Steps[e.currentStepIndex]
 	matchedStep, ok := e.preparedMatches[currentWFStep]
 	if !ok {
-		return 0, "", Step{}, fmt.Errorf("step %q not prepared", currentWFStep)
+		return 0, Step{}, fmt.Errorf("step %q not prepared", currentWFStep)
 	}
 
-	return e.currentStepIndex, currentWFStep, matchedStep, nil
+	return e.currentStepIndex, matchedStep, nil
 }
 
-func (e *Executor) NextStep() (i int, name string, matchedStep Step, err error) {
+func (e *Executor) NextStep() (i int, matchedStep Step, err error) {
 	if e.currentStepIndex+1 >= len(e.Workflow.Steps) {
 		if err := e.StateManager.SetFinalStep(); err != nil {
-			return 0, "", Step{}, fmt.Errorf("failed to set final step in state manager: %w", err)
+			return 0, Step{}, fmt.Errorf("failed to set final step in state manager: %w", err)
 		}
-		return 0, "", Step{}, io.EOF
+		return 0, Step{}, io.EOF
 	}
 	e.currentStepIndex++
 
 	if err := e.StateManager.AdvanceStep(e.Workflow.Steps[e.currentStepIndex]); err != nil {
-		return 0, "", Step{}, fmt.Errorf("failed to advance step in state manager: %w", err)
+		return 0, Step{}, fmt.Errorf("failed to advance step in state manager: %w", err)
 	}
 
 	return e.CurrentStep()
 }
 
 func (e *Executor) CurrentStepCmd(ctx context.Context) (*Cmd, error) {
-	_, _, matchedStep, err := e.CurrentStep()
+	_, matchedStep, err := e.CurrentStep()
 	if err != nil {
 		return nil, err
 	}

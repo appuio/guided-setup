@@ -135,7 +135,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			if k == "enter" && m.varSelectIdx != "" {
 				if idx, err := strconv.Atoi(m.varSelectIdx); err == nil {
-					if _, _, step, err := m.executor.CurrentStep(); err == nil {
+					if _, step, err := m.executor.CurrentStep(); err == nil {
 						varMappings := m.variableMapping(step)
 						var selectedVar string
 						for _, vm := range varMappings {
@@ -176,12 +176,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				cmds = append(cmds, cmd)
 			}
 			if k == "n" || k == "enter" && m.cmdState == cmdStateFinished && m.cmdErr == nil {
-				_, currentStep, _, _ := m.executor.CurrentStep()
-				_, nextStep, _, err := m.executor.NextStep()
+				_, currentStep, _ := m.executor.CurrentStep()
+				_, nextStep, err := m.executor.NextStep()
 				if err == io.EOF {
 					return m.quit()
 				}
-				m.logger.StepChange(currentStep, nextStep)
+				m.logger.StepChange(currentStep.Match, nextStep.Match)
 				m.cmdOutputViewport.SetContent("")
 				m.cmdOutputViewport.GotoTop()
 				m.cmdState = cmdStateIdle
@@ -208,7 +208,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.cmdOutputViewport.SetContent(strings.Join(linesWithoutCarriageReturn, "\n"))
 			m.cmdOutputViewport.GotoBottom()
 		case cmdFinished:
-			_, currentStep, step, _ := m.executor.CurrentStep()
+			_, step, _ := m.executor.CurrentStep()
 			inputs := make(map[string]string)
 			for _, input := range step.MatchedStep.Inputs {
 				inputs[input.Name] = m.executor.StateManager.Outputs()[input.Name].Value
@@ -217,7 +217,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			for _, output := range step.MatchedStep.Outputs {
 				outputs[output.Name] = m.executor.StateManager.Outputs()[output.Name].Value
 			}
-			m.logger.CommandFinished(currentStep, inputs, outputs, m.cmdOutput.String(), msg.err)
+			m.logger.CommandFinished(step.Match, inputs, outputs, m.cmdOutput.String(), msg.err)
 			m.cmdState = cmdStateFinished
 			m.cmdErr = msg.err
 		}
@@ -271,7 +271,7 @@ func (m model) runCmd() (model, tea.Cmd) {
 func (m model) emptyInputs() []string {
 	var empty []string
 
-	_, _, step, err := m.executor.CurrentStep()
+	_, step, err := m.executor.CurrentStep()
 	if err != nil {
 		return empty
 	}
@@ -286,7 +286,7 @@ func (m model) emptyInputs() []string {
 
 func (m model) openInputOverlay(varName string) (model, tea.Cmd) {
 	var description string
-	_, _, step, err := m.executor.CurrentStep()
+	_, step, err := m.executor.CurrentStep()
 	if err == nil {
 		for _, input := range step.MatchedStep.Inputs {
 			if input.Name == varName {
@@ -335,8 +335,8 @@ func (m model) calculateViewportHeight() int {
 }
 
 func (m model) headerView() string {
-	ci, stepName, _, _ := m.executor.CurrentStep()
-	title := infoStyleLeft.Render(stepName)
+	ci, step, _ := m.executor.CurrentStep()
+	title := infoStyleLeft.Render(step.Match)
 	steps := infoStyleRight.Render(fmt.Sprintf("(%d/%d)", ci+1, len(m.executor.Workflow.Steps)))
 	line := strings.Repeat("─", max(0, m.width-(lipgloss.Width(title)+lipgloss.Width(steps))))
 	return lipgloss.JoinHorizontal(lipgloss.Center, title, line, steps)
@@ -363,7 +363,7 @@ func (m model) renderEditSelectorNumber(mp varMapping) string {
 }
 
 func (m model) stepView() string {
-	_, _, step, _ := m.executor.CurrentStep()
+	_, step, _ := m.executor.CurrentStep()
 
 	if step.MatchedStep.Description == "" {
 		step.MatchedStep.Description = "(no description provided)"
