@@ -3,12 +3,13 @@ package cmd
 import (
 	"encoding/json/v2"
 	"fmt"
+	"maps"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/appuio/guided-setup/pkg/executor"
 	"github.com/appuio/guided-setup/pkg/renderer"
-	"github.com/appuio/guided-setup/pkg/state"
 	"github.com/appuio/guided-setup/pkg/steps"
 	"github.com/appuio/guided-setup/pkg/workflow"
 	"github.com/spf13/cobra"
@@ -20,6 +21,12 @@ func init() {
 }
 
 type renderOptions struct {
+	Format string
+}
+
+var formatters = map[string]renderer.Formatter{
+	"asciidoc": renderer.ASCIIDocFormatter{},
+	"markdown": renderer.MarkdownFormatter{},
 }
 
 func NewRenderCommand() *cobra.Command {
@@ -33,17 +40,15 @@ func NewRenderCommand() *cobra.Command {
 		Args:      cobra.MinimumNArgs(2),
 		RunE:      ro.Run,
 	}
+	c.Flags().StringVar(&ro.Format, "format", "asciidoc", "The output format. Supported formats are: "+strings.Join(slices.Sorted(maps.Keys(formatters)), ", "))
 	return c
 }
 
 func (ro *renderOptions) Run(cmd *cobra.Command, args []string) error {
-	_ = cmd.Context()
-
-	stateManager, err := state.NewStateManager(".guided-setup-state.json")
-	if err != nil {
-		return fmt.Errorf("failed to create state manager: %w", err)
+	formatter, ok := formatters[strings.ToLower(ro.Format)]
+	if !ok {
+		return fmt.Errorf("unknown format %q, supported formats are: %s", ro.Format, strings.Join(slices.Sorted(maps.Keys(formatters)), ", "))
 	}
-	defer stateManager.Close()
 
 	rawWF, err := os.ReadFile(args[0])
 	if err != nil {
@@ -85,7 +90,7 @@ func (ro *renderOptions) Run(cmd *cobra.Command, args []string) error {
 
 	ren := &renderer.Renderer{
 		Matcher:   matcher,
-		Formatter: renderer.ASCIIDocFormatter{},
+		Formatter: formatter,
 
 		Out: os.Stdout,
 	}
