@@ -1,0 +1,91 @@
+= Workflow
+
+* <<step-1,Given we choose to go to the moon>>
+* &nbsp;&nbsp;<<step-2,And do the other things>>
+* <<step-3,When we organize and measure the best of our energies and skills>>
+* <<step-4,Then we intend to win>>
+
+[[step-1]]
+== Given we choose to go to the moon
+
+
+
+=== Outputs
+
+* `money_allocated`: The money allocated to the project
+
+
+
+[[step-2]]
+== And do the other things
+
+But why, some say, the moon? Why choose this as our goal? And they may well ask why climb the highest mountain? Why, 35 years ago, fly the Atlantic? Why does Rice play Texas?
+
+Other difficult things for the advancement of mankind, those can include but are not limited to:
+
+* climbing tall mountains
+* flying across the Atlantic
+* Rice playing Texas
+
+
+This step collects all other things that need to be done.
+
+
+=== Inputs
+
+* `the_other_things_to_do`: The other things to do
+
+
+
+=== Outputs
+
+* `the_other_things_done`: Whether the other things have been done
+
+
+
+=== Script
+
+[source,bash]
+----
+echo "Doing the other things..."
+collect_other_things() {
+  echo "Other things done"
+}
+collect_other_things
+
+----
+
+[[step-3]]
+== When we organize and measure the best of our energies and skills
+
+
+
+=== Inputs
+
+* `money_allocated`: The money allocated to the project
+
+
+
+=== Outputs
+
+* `energies_measured`: Whether energies and skills have been measured
+
+
+
+[[step-4]]
+== Then we intend to win
+
+
+
+=== Inputs
+
+* `energies_measured`: Whether energies and skills have been measured
+
+
+* `the_other_things_done`: Whether the other things have been done
+
+
+
+=== Outputs
+
+* `mission_successful`: Whether the mission was successful

@@ -7,39 +7,36 @@ import (
 	"strings"
 
 	"github.com/appuio/guided-setup/pkg/executor"
+	"github.com/appuio/guided-setup/pkg/renderer"
 	"github.com/appuio/guided-setup/pkg/state"
 	"github.com/appuio/guided-setup/pkg/steps"
 	"github.com/appuio/guided-setup/pkg/workflow"
-	"github.com/appuio/guided-setup/ui"
 	"github.com/spf13/cobra"
 	"sigs.k8s.io/yaml"
 )
 
 func init() {
-	RootCmd.AddCommand(NewRunCommand())
+	RootCmd.AddCommand(NewRenderCommand())
 }
 
-type runOptions struct {
-	// ShellRCFile is an optional path to a shell rc file to source before executing any step scripts.
-	ShellRCFile string
+type renderOptions struct {
 }
 
-func NewRunCommand() *cobra.Command {
-	ro := &runOptions{}
+func NewRenderCommand() *cobra.Command {
+	ro := &renderOptions{}
 	c := &cobra.Command{
-		Use:       "run WORKFLOW steps...",
-		Example:   "guided-setup run my-workflow path/to/steps/*.yml",
-		Short:     "Runs the specified workflow.",
+		Use:       "render WORKFLOW steps...",
+		Example:   "guided-setup render my-workflow path/to/steps/*.yml",
+		Short:     "Renders the specified workflow.",
 		Long:      strings.Join([]string{}, " "),
 		ValidArgs: []string{"path", "paths..."},
 		Args:      cobra.MinimumNArgs(2),
 		RunE:      ro.Run,
 	}
-	c.Flags().StringVar(&ro.ShellRCFile, "rcfile", "~/.guided-setup/rc", "Path to a shell rc file to source before executing any step scripts.")
 	return c
 }
 
-func (ro *runOptions) Run(cmd *cobra.Command, args []string) error {
+func (ro *renderOptions) Run(cmd *cobra.Command, args []string) error {
 	_ = cmd.Context()
 
 	stateManager, err := state.NewStateManager(".guided-setup-state.json")
@@ -77,27 +74,24 @@ func (ro *runOptions) Run(cmd *cobra.Command, args []string) error {
 		collectedSteps = append(collectedSteps, parsedFile.Steps...)
 	}
 
-	executor := &executor.Executor{
-		Matcher: executor.Matcher{
-			Workflow: wf,
-			Steps:    collectedSteps,
-		},
-		StateManager: stateManager,
-
-		ShellRCFile: ro.ShellRCFile,
+	matcher := &executor.Matcher{
+		Workflow: wf,
+		Steps:    collectedSteps,
 	}
 
-	if err := executor.Prepare(); err != nil {
-		return fmt.Errorf("failed to prepare executor: %w", err)
+	if err := matcher.Prepare(); err != nil {
+		return fmt.Errorf("failed to prepare matcher: %w", err)
 	}
 
-	ui, err := ui.NewUI(executor)
-	if err != nil {
-		return fmt.Errorf("failed to create UI: %w", err)
+	ren := &renderer.Renderer{
+		Matcher:   matcher,
+		Formatter: renderer.ASCIIDocFormatter{},
+
+		Out: os.Stdout,
 	}
 
-	if _, err := ui.Run(); err != nil {
-		return fmt.Errorf("failed to start UI: %w", err)
+	if err := ren.Render(); err != nil {
+		return fmt.Errorf("failed to render workflow: %w", err)
 	}
 
 	return nil
