@@ -65,8 +65,23 @@ func (r *Renderer) Render() error {
 		}
 
 		if step.MatchedStep.Run != "" {
+			script := new(strings.Builder)
+
+			script.WriteString("OUTPUT=$(mktemp)\n\n")
+			for _, output := range step.MatchedStep.Inputs {
+				script.WriteString(fmt.Sprintf("# export INPUT_%s=\n", output.Name))
+			}
+			script.WriteString("\n")
+
+			script.WriteString(step.MatchedStep.Run)
+			script.WriteString("\n\n")
+
+			script.WriteString("# echo \"# Outputs\"\n")
+			script.WriteString("# cat \"$OUTPUT\"\n")
+			script.WriteString("# rm -f \"$OUTPUT\"\n")
+
 			r.write(r.Formatter.H3("Script"))
-			r.write(r.Formatter.CodeBlock(step.MatchedStep.Run))
+			r.write(r.Formatter.CodeBlock(script.String()))
 		}
 	}
 
