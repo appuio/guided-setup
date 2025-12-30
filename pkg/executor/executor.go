@@ -17,19 +17,90 @@ import (
 )
 
 type Step struct {
+	Match        string
 	MatchedStep  steps.Step
 	NamedMatches map[string]string
 }
 
-type Executor struct {
+type Matcher struct {
 	Workflow workflow.Workflow
+	Steps    []steps.Step
 
-	Steps            []steps.Step
+	preparedMatches map[string]Step
+}
+
+func (m *Matcher) Prepare() error {
+	if len(m.Workflow.Steps) == 0 {
+		return fmt.Errorf("workflow has no steps")
+	}
+	// Match workflow steps to available steps.
+	m.preparedMatches = make(map[string]Step)
+	var errors []error
+	for _, wfStep := range m.Workflow.Steps {
+		err := m.matchStep(wfStep)
+		if err != nil {
+			errors = append(errors, err)
+		}
+	}
+	if err := multierr.Combine(errors...); err != nil {
+		return fmt.Errorf("failed to match workflow steps: %w", err)
+	}
+	return nil
+}
+
+// PreparedSteps returns the list of steps matched to the workflow in order.
+// Returns an error if the matcher has not been prepared.
+func (m *Matcher) PreparedSteps() ([]Step, error) {
+	if m.preparedMatches == nil {
+		return nil, fmt.Errorf("matcher not prepared")
+	}
+	prepared := make([]Step, len(m.Workflow.Steps))
+	for i, wfStep := range m.Workflow.Steps {
+		prepared[i] = m.preparedMatches[wfStep]
+	}
+	return prepared, nil
+}
+
+func (m *Matcher) matchStep(wfStep string) error {
+	var matchedSteps []Step
+	for _, step := range m.Steps {
+		if match := step.Match.FindStringSubmatch(wfStep); len(match) > 0 {
+			namedMatches := make(map[string]string)
+			for i, name := range step.Match.SubexpNames() {
+				if i != 0 {
+					namedMatches[name] = match[i]
+				}
+			}
+			matchedSteps = append(matchedSteps, Step{
+				Match:        wfStep,
+				MatchedStep:  step,
+				NamedMatches: namedMatches,
+			})
+		}
+	}
+
+	switch len(matchedSteps) {
+	case 0:
+		return fmt.Errorf("unmatched step %q", wfStep)
+	case 1:
+		// ok
+	default:
+		return fmt.Errorf("multiple matching steps for %q", wfStep)
+	}
+
+	matchedStep := matchedSteps[0]
+
+	m.preparedMatches[wfStep] = matchedStep
+
+	return nil
+}
+
+type Executor struct {
+	Matcher
+
 	currentStepIndex int
 
 	StateManager *state.StateManager
-
-	preparedMatches map[string]Step
 
 	// ShellRCFile is an optional path to a shell rc file to source before executing any step scripts.
 	ShellRCFile string
@@ -39,21 +110,8 @@ func (e *Executor) Prepare() error {
 	if e.StateManager == nil {
 		return fmt.Errorf("state manager is nil")
 	}
-	if len(e.Workflow.Steps) == 0 {
-		return fmt.Errorf("workflow has no steps")
-	}
-
-	// Match workflow steps to available steps.
-	e.preparedMatches = make(map[string]Step)
-	var errors []error
-	for _, wfStep := range e.Workflow.Steps {
-		err := e.matchStep(wfStep)
-		if err != nil {
-			errors = append(errors, err)
-		}
-	}
-	if err := multierr.Combine(errors...); err != nil {
-		return fmt.Errorf("failed to match workflow steps: %w", err)
+	if err := e.Matcher.Prepare(); err != nil {
+		return fmt.Errorf("failed to prepare matcher: %w", err)
 	}
 
 	// Read initial inputs from environment.
@@ -94,68 +152,34 @@ func (e *Executor) Prepare() error {
 	return nil
 }
 
-func (e *Executor) matchStep(wfStep string) error {
-	var matchedSteps []Step
-	for _, step := range e.Steps {
-
-		if match := step.Match.FindStringSubmatch(wfStep); len(match) > 0 {
-			namedMatches := make(map[string]string)
-			for i, name := range step.Match.SubexpNames() {
-				if i != 0 {
-					namedMatches[name] = match[i]
-				}
-			}
-			matchedSteps = append(matchedSteps, Step{
-				MatchedStep:  step,
-				NamedMatches: namedMatches,
-			})
-		}
-	}
-
-	switch len(matchedSteps) {
-	case 0:
-		return fmt.Errorf("unmatched step %q", wfStep)
-	case 1:
-		// ok
-	default:
-		return fmt.Errorf("multiple matching steps for %q", wfStep)
-	}
-
-	matchedStep := matchedSteps[0]
-
-	e.preparedMatches[wfStep] = matchedStep
-
-	return nil
-}
-
-func (e *Executor) CurrentStep() (i int, name string, matchedStep Step, err error) {
+func (e *Executor) CurrentStep() (i int, matchedStep Step, err error) {
 	currentWFStep := e.Workflow.Steps[e.currentStepIndex]
 	matchedStep, ok := e.preparedMatches[currentWFStep]
 	if !ok {
-		return 0, "", Step{}, fmt.Errorf("step %q not prepared", currentWFStep)
+		return 0, Step{}, fmt.Errorf("step %q not prepared", currentWFStep)
 	}
 
-	return e.currentStepIndex, currentWFStep, matchedStep, nil
+	return e.currentStepIndex, matchedStep, nil
 }
 
-func (e *Executor) NextStep() (i int, name string, matchedStep Step, err error) {
+func (e *Executor) NextStep() (i int, matchedStep Step, err error) {
 	if e.currentStepIndex+1 >= len(e.Workflow.Steps) {
 		if err := e.StateManager.SetFinalStep(); err != nil {
-			return 0, "", Step{}, fmt.Errorf("failed to set final step in state manager: %w", err)
+			return 0, Step{}, fmt.Errorf("failed to set final step in state manager: %w", err)
 		}
-		return 0, "", Step{}, io.EOF
+		return 0, Step{}, io.EOF
 	}
 	e.currentStepIndex++
 
 	if err := e.StateManager.AdvanceStep(e.Workflow.Steps[e.currentStepIndex]); err != nil {
-		return 0, "", Step{}, fmt.Errorf("failed to advance step in state manager: %w", err)
+		return 0, Step{}, fmt.Errorf("failed to advance step in state manager: %w", err)
 	}
 
 	return e.CurrentStep()
 }
 
 func (e *Executor) CurrentStepCmd(ctx context.Context) (*Cmd, error) {
-	_, _, matchedStep, err := e.CurrentStep()
+	_, matchedStep, err := e.CurrentStep()
 	if err != nil {
 		return nil, err
 	}
