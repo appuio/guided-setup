@@ -44,11 +44,20 @@ This step collects all other things that need to be done.
 ### Script
 
 ```bash
+OUTPUT=$(mktemp)
+
+# export INPUT_the_other_things_to_do=
+
 echo "Doing the other things..."
 collect_other_things() {
   echo "Other things done"
 }
 collect_other_things
+
+
+# echo "# Outputs"
+# cat "$OUTPUT"
+# rm -f "$OUTPUT"
 
 ```
 
