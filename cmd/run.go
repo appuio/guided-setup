@@ -28,7 +28,7 @@ func NewRunCommand() *cobra.Command {
 	ro := &runOptions{}
 	c := &cobra.Command{
 		Use:       "run WORKFLOW steps...",
-		Example:   "guided-setup run my-workflow path/to/steps/*.yml",
+		Example:   "guided-setup run workflow.workflow path/to/steps/*.yml",
 		Short:     "Runs the specified workflow.",
 		Long:      strings.Join([]string{}, " "),
 		ValidArgs: []string{"path", "paths..."},

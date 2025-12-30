@@ -32,10 +32,12 @@ var formatters = map[string]renderer.Formatter{
 func NewRenderCommand() *cobra.Command {
 	ro := &renderOptions{}
 	c := &cobra.Command{
-		Use:       "render WORKFLOW steps...",
-		Example:   "guided-setup render my-workflow path/to/steps/*.yml",
-		Short:     "Renders the specified workflow.",
-		Long:      strings.Join([]string{}, " "),
+		Use:     "render WORKFLOW steps...",
+		Example: "guided-setup render workflow.workflow path/to/steps/*.yml",
+		Short:   "Renders the specified workflow.",
+		Long: strings.Join([]string{
+			"The render command renders the specified workflow in the specified format.",
+		}, " "),
 		ValidArgs: []string{"path", "paths..."},
 		Args:      cobra.MinimumNArgs(2),
 		RunE:      ro.Run,
