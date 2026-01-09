@@ -363,6 +363,7 @@ steps:
     This step decommissions resources associated with the Puppet managed LoadBalancers.
   inputs:
   - name: commodore_cluster_id
+  - name: control_vshn_api_token
   - name: lb_fqdn_1
   - name: lb_fqdn_2
   - name: lb_backup_1
@@ -371,25 +372,35 @@ steps:
   - name: lb_icinga_2
   run: |
     set -euo pipefail
+    echo "# Removing servers from control.vshn.net ... #"
+    AUTH="X-AccessToken: ${INPUT_control_vshn_api_token}"
+
+    curl -sH"$AUTH" https://control.vshn.net/api/servers/1/appuio/${INPUT_lb_fqdn_1} -XDELETE
+    curl -sH"$AUTH" https://control.vshn.net/api/servers/1/appuio/${INPUT_lb_fqdn_2} -XDELETE
+
+    echo "# Removed servers from control.vshn.net. #"
+    echo
     echo "# Clearing encdata caches ... #"
     ssh nfs1.ch1.puppet.vshn.net "sudo rm /srv/nfs/export/puppetserver-puppetserver-enc-cache-pvc-*/${INPUT_lb_fqdn_1}.yaml" || true
     ssh nfs1.ch1.puppet.vshn.net "sudo rm /srv/nfs/export/puppetserver-puppetserver-enc-cache-pvc-*/${INPUT_lb_fqdn_2}.yaml" || true
     echo "# Cleared encdata caches. #"
     echo
     echo "# Cleaning up LBs in icinga ... #"
-    for parent_zone in `echo "$INPUT_lb_icinga_1" "$INPUT_lb_icinga_2" | sort | uniq`
+    for parent_zone in $( echo "$INPUT_lb_icinga_1" "$INPUT_lb_icinga_2" | xargs -n 1 | sort -u | paste -s )
     do
       if [ "$parent_zone" != "master" ]; then
         icinga_host="$parent_zone"
       else
         icinga_host="master3.prod.monitoring.vshn.net"
       fi
-      echo "  "Cleaning up LB from $icinga_host ...
+      echo Cleaning up LB from $icinga_host ...
       ssh "${icinga_host}" "sudo rm -rf /var/lib/icinga2/api/zones/${INPUT_lb_fqdn_1}" || true
       ssh "${icinga_host}" "sudo rm -rf /var/lib/icinga2/api/zones/${INPUT_lb_fqdn_2}" || true
       if [ "$parent_zone" != "master" ]; then
+        echo "Running puppet on ${icinga_host}"
         ssh "${icinga_host}" sudo puppetctl run
       fi
+      echo "Running puppet on icinga master ..."
       ssh master3.prod.monitoring.vshn.net sudo puppetctl run
     done
     echo "# Cleaned up LBs in icinga. #"
