@@ -727,6 +727,7 @@ steps:
     ssh "${INPUT_lb_fqdn_1}" sudo puppetctl run
     ssh "${INPUT_lb_fqdn_2}" sudo puppetctl run
 
+    echo -n "Waiting for Bootstrap API to become available .."
     API_URL=$(yq e '.clusters[0].cluster.server' "${installer_dir}/auth/kubeconfig")
     while ! curl --connect-timeout 1 "${API_URL}/healthz" -k &>/dev/null; do
       echo -n "."
@@ -737,7 +738,8 @@ steps:
 
 - match: And I store the subnet ID and floating IP in the Syn hierarchy
   description: |-
-    This step retrieves the subnet ID and ingress floating IP from Terraform and stores them in the Syn hierarchy.
+    This step retrieves the subnet ID and ingress floating IP from Terraform and
+    stores them in the Syn hierarchy.
   inputs:
   - name: cloudscale_token
   - name: cloudscale_token_floaty
@@ -834,6 +836,7 @@ steps:
   - name: commodore_tenant_id
   - name: commodore_api_url
   - name: kubeconfig_path
+  - name: cluster_domain
   run: |
     set -euo pipefail
 
@@ -885,6 +888,7 @@ steps:
       worker_count             = 0
       additional_worker_groups = {}
     }
+    EOF
 
     echo "Patching Cilium manifests so control plane bootstrap can proceed ..."
 
@@ -945,7 +949,9 @@ steps:
 
 - match: Then I deploy initial manifests
   description: |-
-    This step deploys some manifests required during bootstrap, including cert-manager,  machine-api-provider, machinesets, loadbalancer controller, and ingress loadbalancer.
+    This step deploys some manifests required during bootstrap, including
+    cert-manager,  machine-api-provider, machinesets, loadbalancer controller,
+    and ingress loadbalancer.
   inputs:
   - name: commodore_cluster_id
   - name: commodore_tenant_id
@@ -977,6 +983,9 @@ steps:
     kubectl apply -f catalog/manifests/machine-api-provider-cloudscale/11_deployment.yaml
     echo '# Applied machine-api-provider. #'
     echo
+    # TODO(aa): In my test I was getting some nodes with no ProviderID set.
+    # I'm wondering if that's because machinesets were applied too soon - the CCM hadn't had a chance to come online in time.
+    # I had to spend some time manually recreating nodes and/or adding ProviderIDs to them.
     echo '# Applying machinesets ... #'
     kubectl apply `for f in catalog/manifests/openshift4-nodes/machineset-*.yaml ; do echo -n "-f $f " ; done`
     echo '# Applied machinesets. #'
@@ -984,6 +993,8 @@ steps:
     echo '# Applying loadbalancer controller ... #'
     kubectl apply -f catalog/manifests/cloudscale-loadbalancer-controller/00_namespace.yaml
     kapitan refs --reveal --refs-path catalog/refs -f catalog/manifests/cloudscale-loadbalancer-controller/10_secrets.yaml | kubectl apply -f -
+
+    # TODO(aa): This fails on the first attempt because likely some of the previous resources need time to come online; figure out what to wait for
     kubectl apply -Rf catalog/manifests/cloudscale-loadbalancer-controller/10_kustomize
     echo "Waiting for load balancer to become available ..."
     kubectl -n appuio-cloudscale-loadbalancer-controller \
@@ -1091,7 +1102,10 @@ steps:
 
 - match: And I configure initial deployments
   description: |-
-    This step configures some deployments that require manual changes after cluster bootstrap, such as reverting the Cilium patch from earlier, enabling proxy protocol on the Ingress controller, and scheduling the ingress controller on the infrastructure nodes.
+    This step configures some deployments that require manual changes after
+    cluster bootstrap, such as reverting the Cilium patch from earlier, enabling
+    proxy protocol on the Ingress controller, and scheduling the ingress
+    controller on the infrastructure nodes.
   inputs:
   - name: commodore_cluster_id
   - name: commodore_api_url

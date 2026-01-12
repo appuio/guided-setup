@@ -22,6 +22,10 @@ steps:
 
     image_path="rhcos-$MAJOR.$MINOR.qcow2"
 
+    env -i "image_major=$MAJOR" >> $OUTPUT
+    env -i "image_minor=$MINOR" >> $OUTPUT
+    env -i "image_patch=$PATCH" >> $OUTPUT
+
     echo "Image is $image_path"
 
     if [ -f "$image_path" ]; then
@@ -34,9 +38,6 @@ steps:
 
     curl -L "https://mirror.openshift.com/pub/openshift-v4/dependencies/rhcos/${MAJOR}.${MINOR}/${MATCH_image_name}/rhcos-${MATCH_image_name}-x86_64-openstack.x86_64.qcow2.gz" | gzip -d > "$image_path"
     env -i "image_path=$image_path" >> $OUTPUT
-    env -i "image_major=$MAJOR" >> $OUTPUT
-    env -i "image_minor=$MINOR" >> $OUTPUT
-    env -i "image_patch=$PATCH" >> $OUTPUT
 
 - match: And I set up required S3 buckets
   description: |-
