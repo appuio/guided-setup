@@ -285,18 +285,23 @@ steps:
     vault login -method=oidc
 
     # extract restic credentials from catalog and vault
-    export RESTIC_REPOSITORY=s3:$(yq -o=json 'select(.kind == "Schedule")| .spec.backend.s3 | .endpoint + "/" + .bucket' catalog/manifests/cluster-backup/10_object.yaml)
+    restic_repo=s3:$(yq -o=json 'select(.kind == "Schedule")| .spec.backend.s3 | .endpoint + "/" + .bucket' catalog/manifests/cluster-backup/10_object.yaml)
+    export RESTIC_REPOSITORY="$restic_repo"
 
-    export S3_ENDPOINT=s3:$(yq -o=json 'select(.kind == "Schedule")| .spec.backend.s3 | .endpoint' catalog/manifests/cluster-backup/10_object.yaml)
+    s3_ep=s3:$(yq -o=json 'select(.kind == "Schedule")| .spec.backend.s3 | .endpoint' catalog/manifests/cluster-backup/10_object.yaml)
+    export S3_ENDPOINT="$s3_ep"
 
     PASSWORD_KEY="$(yq -o=json 'select(.kind == "Secret" and .metadata.name == "objects-backup-password") | .stringData.password' catalog/manifests/cluster-backup/10_object.yaml | cut -d: -f2)"
-    export RESTIC_PASSWORD=$(vault kv get -format json "clusters/kv/${PASSWORD_KEY%/*}" | jq -r ".data.data.${PASSWORD_KEY##*/}")
+    restic_pw=$(vault kv get -format json "clusters/kv/${PASSWORD_KEY%/*}" | jq -r ".data.data.${PASSWORD_KEY##*/}")
+    export RESTIC_PASSWORD="$restic_pw"
 
     ID_KEY="$(yq -o=json 'select(.kind == "Secret" and .metadata.name == "objects-backup-s3-credentials") | .stringData.username' catalog/manifests/cluster-backup/10_object.yaml | cut -d: -f2)"
-    export AWS_ACCESS_KEY_ID=$(vault kv get -format json "clusters/kv/${ID_KEY%/*}" | jq -r ".data.data.${ID_KEY##*/}")
+    aws_id=$(vault kv get -format json "clusters/kv/${ID_KEY%/*}" | jq -r ".data.data.${ID_KEY##*/}")
+    export AWS_ACCESS_KEY_ID="$aws_id"
 
     SECRET_KEY="$(yq -o=json 'select(.kind == "Secret" and .metadata.name == "objects-backup-s3-credentials") | .stringData.password' catalog/manifests/cluster-backup/10_object.yaml | cut -d: -f2)"
-    export AWS_SECRET_ACCESS_KEY=$(vault kv get -format json "clusters/kv/${SECRET_KEY%/*}" | jq -r ".data.data.${SECRET_KEY##*/}")
+    aws_secret=$(vault kv get -format json "clusters/kv/${SECRET_KEY%/*}" | jq -r ".data.data.${SECRET_KEY##*/}")
+    export AWS_SECRET_ACCESS_KEY="$aws_secret"
 
     # retrieve latest restic snapshots
     OBJECT_ID=`restic snapshots -H syn-cluster-backup --latest 1 --json | jq -r .[-1].id`
@@ -343,7 +348,7 @@ steps:
     echo '##############################################################'
 
     echo -n "Checking for deletion of main Cloudscale token ..."
-    while curl -sH "Authorization: Bearer ${INPUT_cloudscale_token}" https://api.cloudscale.ch/v1/flavors  --fail > /dev/null
+    while [[ `curl -sH "Authorization: Bearer ${INPUT_cloudscale_token}" https://api.cloudscale.ch/v1/flavors -o /dev/null -w"%{http_code}"` != 401 ]]
     do
       echo -n .
       sleep 3
@@ -351,7 +356,7 @@ steps:
     echo " Success."
 
     echo -n "Checking for deletion of Floaty Cloudscale token ..."
-    while curl -sH "Authorization: Bearer ${INPUT_cloudscale_token_floaty}" https://api.cloudscale.ch/v1/flavors  --fail > /dev/null
+    while [[ `curl -sH "Authorization: Bearer ${INPUT_cloudscale_token_floaty}" https://api.cloudscale.ch/v1/flavors -o /dev/null -w"%{http_code}"` != 401 ]]
     do
       echo -n .
       sleep 3
@@ -413,8 +418,8 @@ steps:
     git clone git@git.vshn.net:vshn-puppet/nodes_hieradata.git
     pushd nodes_hieradata
 
-    git rm ${INPUT_lb_fqdn_1}.yaml || true
-    git rm ${INPUT_lb_fqdn_2}.yaml || true
+    git rm "${INPUT_lb_fqdn_1}.yaml" || true
+    git rm "${INPUT_lb_fqdn_2}.yaml" || true
 
     if not git diff-index --quiet HEAD
     then
@@ -433,7 +438,7 @@ steps:
     git clone git@git.vshn.net:appuio/appuio_hieradata.git
     pushd appuio_hieradata
 
-    git rm -rf lbaas/${INPUT_commodore_cluster_id}* || true
+    git rm -rf "lbaas/${INPUT_commodore_cluster_id}"* || true
 
     if not git diff-index --quiet HEAD
     then
@@ -589,7 +594,7 @@ steps:
     git clone git@git.vshn.net:vshn/openshift4-clusters.git
     pushd openshift4-clusters
 
-    git rm -rf ${INPUT_commodore_cluster_id} || true
+    git rm -rf "${INPUT_commodore_cluster_id}" || true
 
     if not git diff-index --quiet HEAD
     then
