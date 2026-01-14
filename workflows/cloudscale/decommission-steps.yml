@@ -8,17 +8,24 @@ steps:
       Domain of the cluster - the part after `api` or `apps`, respectively.
 
       Usually of the form `<CLUSTER_ID>.<BASE_DOMAIN>`
+  - name: passbolt_passphrase
+    description: |-
+      Your password for Passbolt.
+
+      This is required to access the encrypted emergency credentials.
   - name: commodore_cluster_id
   outputs:
   - name: kubeconfig_path
   run: |
+    set -euo pipefail
     export EMR_KUBERNETES_ENDPOINT=https://api.${INPUT_cluster_domain}:6443
+    export EMR_PASSPHRASE="${INPUT_passbolt_passphrase}"
     emergency-credentials-receive "${INPUT_commodore_cluster_id}"
 
     export KUBECONFIG="em-${INPUT_commodore_cluster_id}"
     kubectl get nodes
 
-    env -i "kubeconfig_path=${pwd}/em-${INPUT_commodore_cluster_id}" >> $OUTPUT
+    env -i "kubeconfig_path=$(pwd)/em-${INPUT_commodore_cluster_id}" >> $OUTPUT
 - match: Then I confirm cluster deletion
   description: |-
     This step asks you to confirm with 4 eyes whether this cluster is really to be deleted.
@@ -50,7 +57,7 @@ steps:
     OPSGENIE_KEY=$(vault kv get -format=json \
       clusters/kv/__shared__/__shared__/opsgenie/aldebaran | \
       jq -r '.data.data["heartbeat-password"]')
-    curl "https://api.opsgenie.com/v2/heartbeats/${CLUSTER_ID}" \
+    curl "https://api.opsgenie.com/v2/heartbeats/${INPUT_commodore_cluster_id}" \
       -H"Authorization: GenieKey ${OPSGENIE_KEY}" \
       -H"Content-Type: application/json" \
       -XPATCH --data '{"enabled":false}'
@@ -68,7 +75,9 @@ steps:
         root argocd
     kubectl -n syn-argocd-operator scale deployment \
         syn-argocd-operator-controller-manager --replicas 0
+    kubectl wait --for=delete pod -lcontrol-plane=argocd-operator --timeout=60s -nsyn-argocd-operator
     kubectl -n syn scale sts syn-argocd-application-controller --replicas 0
+    kubectl wait --for=delete pod -lapp.kubernetes.io/name=syn-argocd-application-controller --timeout=60s -nsyn
 - match: And I delete all Load Balancer services and Load Balancers
   description: |-
     This step deletes all services of type LoadBalancer from the cluster.
@@ -239,7 +248,7 @@ steps:
     echo '##############################################################'
     echo '#                                                            #'
     echo '#  Please configure downtimes for both hosts in Icinga UI.   #'
-    echo '#  Don't forget to also enable downtime for "All Services".  #'
+    echo "#  Don't forget to also enable downtime for 'All Services'.  #"
     echo '#                                                            #'
     echo '##############################################################'
     echo
@@ -407,11 +416,13 @@ steps:
     vault login -method=oidc
 
     # extract restic credentials from catalog and vault
-    restic_repo=s3:$(yq -o=json 'select(.kind == "Schedule")| .spec.backend.s3 | .endpoint + "/" + .bucket' catalog/manifests/cluster-backup/10_object.yaml)
+    restic_repo=s3:$(yq -o=json 'select(.kind == "Schedule")| .spec.backend.s3 | .endpoint + "/" + .bucket' catalog/manifests/cluster-backup/10_object.yaml | tr -d '"')
     export RESTIC_REPOSITORY="$restic_repo"
+    echo "$RESTIC_REPOSITORY"
 
-    s3_ep=s3:$(yq -o=json 'select(.kind == "Schedule")| .spec.backend.s3 | .endpoint' catalog/manifests/cluster-backup/10_object.yaml)
+    s3_ep=s3:$(yq -o=json 'select(.kind == "Schedule")| .spec.backend.s3 | .endpoint' catalog/manifests/cluster-backup/10_object.yaml | tr -d '"')
     export S3_ENDPOINT="$s3_ep"
+    echo "$S3_ENDPOINT"
 
     PASSWORD_KEY="$(yq -o=json 'select(.kind == "Secret" and .metadata.name == "objects-backup-password") | .stringData.password' catalog/manifests/cluster-backup/10_object.yaml | cut -d: -f2)"
     restic_pw=$(vault kv get -format json "clusters/kv/${PASSWORD_KEY%/*}" | jq -r ".data.data.${PASSWORD_KEY##*/}")
@@ -442,7 +453,7 @@ steps:
 
     # configure minio client to use the bucket
     mc alias set \
-      "${INPUT_commodore_cluster_id}_backup" "${S3_ENDPOINT}" \
+      "${INPUT_commodore_cluster_id}_backup" "${S3_ENDPOINT##s3:}" \
       $(echo $response | jq -r '.keys[0].access_key') \
       $(echo $response | jq -r '.keys[0].secret_key')
 

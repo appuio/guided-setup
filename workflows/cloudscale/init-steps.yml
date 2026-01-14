@@ -1047,7 +1047,11 @@ steps:
     kapitan refs --reveal --refs-path catalog/refs -f catalog/manifests/cloudscale-loadbalancer-controller/10_secrets.yaml | kubectl apply -f -
 
     # TODO(aa): This fails on the first attempt because likely some of the previous resources need time to come online; figure out what to wait for
-    kubectl apply -Rf catalog/manifests/cloudscale-loadbalancer-controller/10_kustomize
+    until kubectl apply -Rf catalog/manifests/cloudscale-loadbalancer-controller/10_kustomize
+    do
+      echo "Manifests didn't apply, waiting a moment to try again ..."
+      sleep 20
+    done
     echo "Waiting for load balancer to become available ..."
     kubectl -n appuio-cloudscale-loadbalancer-controller \
       wait --for condition=available \
