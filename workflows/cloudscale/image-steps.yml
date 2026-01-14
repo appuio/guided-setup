@@ -71,6 +71,14 @@ steps:
       $(echo $response | jq -r '.keys[0].access_key') \
       $(echo $response | jq -r '.keys[0].secret_key')
 
+    echo -n "Waiting for S3 credentials to become available ..."
+    until mc ls > /dev/null 2>&1
+    do
+      echo -n .
+      sleep 5
+    done
+    echo "OK"
+
     mc mb --ignore-existing \
       "${INPUT_commodore_cluster_id}/${INPUT_commodore_cluster_id}-bootstrap-ignition"
     mc mb --ignore-existing \
