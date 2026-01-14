@@ -100,11 +100,11 @@ steps:
     echo "Retrieving Commodore tenant ID for cluster ID '$INPUT_commodore_cluster_id' from API at '$INPUT_commodore_api_url'..."
     tenant_id=$(curl -sH "Authorization: Bearer $(commodore fetch-token)" ${COMMODORE_API_URL}/clusters/${INPUT_commodore_cluster_id} | jq -r .tenant)
     echo "$tenant_id" | grep 't-' >/dev/null 2>&1 && { echo "✅ Retrieved tenant ID '$tenant_id' for cluster ID '$INPUT_commodore_cluster_id'."; } || { echo "❌ Failed to retrieve valid tenant ID for cluster ID '$INPUT_commodore_cluster_id'. Got '$tenant_id'. Please check your Commodore API access and cluster ID."; exit 1; }
-    env -i "commodore_tenant_id=$tenant_id" >> $OUTPUT
+    env -i "commodore_tenant_id=$tenant_id" >> "$OUTPUT"
 
-    export region=$(curl -sH "Authorization: Bearer $(commodore fetch-token)" ${COMMODORE_API_URL}/clusters/${INPUT_commodore_cluster_id} | jq -r .facts.region)
+    region=$(curl -sH "Authorization: Bearer $(commodore fetch-token)" ${COMMODORE_API_URL}/clusters/${INPUT_commodore_cluster_id} | jq -r .facts.region)
     test -z "$region" && test "$region" != "null" && { echo "❌ Failed to retrieve cloudscale region for cluster ID '$INPUT_commodore_cluster_id'."; exit 1; } || { echo "✅ Retrieved cloudscale region '$region' for cluster ID '$INPUT_commodore_cluster_id'."; }
-    env -i "cloudscale_region=$region" >> $OUTPUT
+    env -i "cloudscale_region=$region" >> "$OUTPUT"
 - match: And a Keycloak service
   description: |-
     In this step, you have to create a Keycloak service for the new cluster
@@ -114,7 +114,7 @@ steps:
   run: |
     echo '#########################################################'
     echo '#                                                       #'
-    echo '#  Please create a Keycloak service with the cluster's  #'
+    echo "#  Please create a Keycloak service with the cluster's  #"
     echo '#  ID as Service Name via the VSHN Control Web UI.      #'
     echo '#                                                       #'
     echo '#########################################################'
@@ -143,11 +143,11 @@ steps:
     This step currently does not validate whether the tokens have read permission.
   run: |
     set -euo pipefail
-    if [[ `curl -sH "Authorization: Bearer ${INPUT_cloudscale_token}" https://api.cloudscale.ch/v1/flavors -o /dev/null -w"%{http_code}"` != 200 ]]
+    if [[ $( curl -sH "Authorization: Bearer ${INPUT_cloudscale_token}" https://api.cloudscale.ch/v1/flavors -o /dev/null -w"%{http_code}" ) != 200 ]]
     then
       echo "Cloudscale token not valid!"
     fi
-    if [[ `curl -sH "Authorization: Bearer ${INPUT_cloudscale_token_floaty}" https://api.cloudscale.ch/v1/flavors -o /dev/null -w"%{http_code}"` != 200 ]]
+    if [[ $( curl -sH "Authorization: Bearer ${INPUT_cloudscale_token_floaty}" https://api.cloudscale.ch/v1/flavors -o /dev/null -w"%{http_code}" ) != 200 ]]
     then
       echo "Cloudscale Floaty token not valid!"
     fi
@@ -176,7 +176,7 @@ steps:
       echo "Error validating GitLab token. Are you sure it is valid?"
       exit 1
     fi
-    env -i "gitlab_user_name=$user" >> $OUTPUT
+    env -i "gitlab_user_name=$user" >> "$OUTPUT"
     echo "Token is valid."
 - match: And a control.vshn.net Servers API token
   description: |-
@@ -249,29 +249,29 @@ steps:
     # Set the cloudscale.ch access secrets
     vault kv put clusters/kv/${INPUT_commodore_tenant_id}/${INPUT_commodore_cluster_id}/cloudscale \
       token=${INPUT_cloudscale_token} \
-      s3_access_key=$(echo "${INPUT_bucket_user}" | jq -r '.keys[0].access_key') \
-      s3_secret_key=$(echo "${INPUT_bucket_user}" | jq -r '.keys[0].secret_key')
+      s3_access_key="$(echo "${INPUT_bucket_user}" | jq -r '.keys[0].access_key')" \
+      s3_secret_key="$(echo "${INPUT_bucket_user}" | jq -r '.keys[0].secret_key')"
 
     # Put LB API key in Vault
     vault kv put clusters/kv/${INPUT_commodore_tenant_id}/${INPUT_commodore_cluster_id}/floaty \
-      iam_secret=${INPUT_cloudscale_token_floaty}
+      iam_secret="${INPUT_cloudscale_token_floaty}"
 
     # Generate an HTTP secret for the registry
     vault kv put clusters/kv/${INPUT_commodore_tenant_id}/${INPUT_commodore_cluster_id}/registry \
-      httpSecret=$(LC_ALL=C tr -cd "A-Za-z0-9" </dev/urandom | head -c 128)
+      httpSecret="$(LC_ALL=C tr -cd "A-Za-z0-9" </dev/urandom | head -c 128)"
 
     # Generate a master password for K8up backups
     vault kv put clusters/kv/${INPUT_commodore_tenant_id}/${INPUT_commodore_cluster_id}/global-backup \
-      password=$(LC_ALL=C tr -cd "A-Za-z0-9" </dev/urandom | head -c 32)
+      password="$(LC_ALL=C tr -cd "A-Za-z0-9" </dev/urandom | head -c 32)"
 
     # Generate a password for the cluster object backups
     vault kv put clusters/kv/${INPUT_commodore_tenant_id}/${INPUT_commodore_cluster_id}/cluster-backup \
-      password=$(LC_ALL=C tr -cd "A-Za-z0-9" </dev/urandom | head -c 32)
+      password="$(LC_ALL=C tr -cd "A-Za-z0-9" </dev/urandom | head -c 32)"
 
     hieradata_repo_secret=$(vault kv get \
       -format=json "clusters/kv/lbaas/hieradata_repo_token" | jq '.data.data')
-    env -i "hieradata_repo_user=$(echo "${hieradata_repo_secret}" | jq -r '.user')" >> $OUTPUT
-    env -i "hieradata_repo_token=$(echo "${hieradata_repo_secret}" | jq -r '.token')" >> $OUTPUT
+    env -i "hieradata_repo_user=$(echo "${hieradata_repo_secret}" | jq -r '.user')" >> "$OUTPUT"
+    env -i "hieradata_repo_token=$(echo "${hieradata_repo_secret}" | jq -r '.token')" >> "$OUTPUT"
 
 - match: And I check the cluster domain
   description: |-
@@ -286,7 +286,7 @@ steps:
 
     cluster_domain="${INPUT_commodore_cluster_id}.${INPUT_base_domain}"
     echo "Cluster domain is set to '$cluster_domain'"
-    echo "cluster_domain=$cluster_domain" >> $OUTPUT
+    echo "cluster_domain=$cluster_domain" >> "$OUTPUT"
 
 - match: And I prepare the cluster repository
   description: |-
@@ -308,7 +308,7 @@ steps:
 
     rm -rf inventory/classes/
     mkdir -p inventory/classes/
-    git clone $(curl -sH"Authorization: Bearer $(commodore fetch-token)" "${INPUT_commodore_api_url}/tenants/${INPUT_commodore_tenant_id}" | jq -r '.gitRepo.url') inventory/classes/${INPUT_commodore_tenant_id}
+    git clone "$(curl -sH"Authorization: Bearer $(commodore fetch-token)" "${INPUT_commodore_api_url}/tenants/${INPUT_commodore_tenant_id}" | jq -r '.gitRepo.url')" inventory/classes/${INPUT_commodore_tenant_id}
 
     pushd "inventory/classes/${INPUT_commodore_tenant_id}/"
 
@@ -355,7 +355,7 @@ steps:
 
     commodore catalog compile ${INPUT_commodore_cluster_id} --push \
       --dynamic-fact kubernetesVersion.major=1 \
-      --dynamic-fact kubernetesVersion.minor="$((${INPUT_image_minor}+13))" \
+      --dynamic-fact kubernetesVersion.minor="$((INPUT_image_minor+13))" \
       --dynamic-fact openshiftVersion.Major=${INPUT_image_major} \
       --dynamic-fact openshiftVersion.Minor=${INPUT_image_minor}
 
@@ -379,27 +379,27 @@ steps:
   run: |
     set -euo pipefail
 
-    export VAULT_ADDR=${INPUT_vault_address}
+    export VAULT_ADDR="${INPUT_vault_address}"
     vault login -method=oidc
 
     ssh_private_key="$(pwd)/ssh_${INPUT_commodore_cluster_id}"
     ssh_public_key="${ssh_private_key}.pub"
 
-    env -i "ssh_public_key_path=$ssh_public_key" >> $OUTPUT
+    env -i "ssh_public_key_path=$ssh_public_key" >> "$OUTPUT"
 
     if vault kv get -format=json clusters/kv/${INPUT_commodore_tenant_id}/${INPUT_commodore_cluster_id}/cloudscale/ssh >/dev/null 2>&1; then
       echo "SSH keypair for cluster ${INPUT_commodore_cluster_id} already exists in Vault, skipping generation."
 
       vault kv get -format=json clusters/kv/${INPUT_commodore_tenant_id}/${INPUT_commodore_cluster_id}/cloudscale/ssh | \
-        jq -r '.data.data.private_key|@base64d' > ${ssh_private_key}
+        jq -r '.data.data.private_key|@base64d' > "${ssh_private_key}"
 
-      chmod 600 ${ssh_private_key}
-      ssh-keygen -f ${ssh_private_key} -y > ${ssh_public_key}
+      chmod 600 "${ssh_private_key}"
+      ssh-keygen -f "${ssh_private_key}" -y > "${ssh_public_key}"
 
     else
       echo "Generating new SSH keypair for cluster ${INPUT_commodore_cluster_id}."
 
-      ssh-keygen -C "vault@${INPUT_commodore_cluster_id}" -t ed25519 -f $ssh_private_key -N ''
+      ssh-keygen -C "vault@${INPUT_commodore_cluster_id}" -t ed25519 -f "$ssh_private_key" -N ''
 
       base64_no_wrap='base64'
       if [[ "$OSTYPE" == "linux"* ]]; then
@@ -407,13 +407,13 @@ steps:
       fi
 
       vault kv put clusters/kv/${INPUT_commodore_tenant_id}/${INPUT_commodore_cluster_id}/cloudscale/ssh \
-        private_key=$(cat $ssh_private_key | eval "$base64_no_wrap")
+        private_key="$(cat "$ssh_private_key" | eval "$base64_no_wrap")"
     fi
 
     echo Adding SSH private key to ssh-agent...
     echo You might need to start the ssh-agent first using: eval "\$(ssh-agent)"
-    echo +ssh-add $ssh_private_key
-    ssh-add $ssh_private_key
+    echo ssh-add "$ssh_private_key"
+    ssh-add "$ssh_private_key"
 
     installer_dir="$(pwd)/target"
     rm -rf "${installer_dir}"
@@ -432,7 +432,7 @@ steps:
       networkType: Cilium
     pullSecret: |
       ${INPUT_redhat_pull_secret}
-    sshKey: "$(cat $ssh_public_key)"
+    sshKey: "$(cat "$ssh_public_key")"
     EOF
 
     echo Running OpenShift installer to create manifests...
@@ -448,13 +448,13 @@ steps:
 
     echo Copying Cloudscale CCM manifests...
     for f in catalog/manifests/cloudscale-cloud-controller-manager/*; do
-      cp $f ${installer_dir}/manifests/cloudscale_ccm_$(basename $f)
+      cp "$f" "${installer_dir}/manifests/cloudscale_ccm_$(basename "$f")"
     done
     yq -i e ".stringData.access-token=\"${INPUT_cloudscale_token}\"" \
-      ${installer_dir}/manifests/cloudscale_ccm_01_secret.yaml
+      "${installer_dir}/manifests/cloudscale_ccm_01_secret.yaml"
 
     echo Copying Cilium OLM manifests...
-    cp catalog/manifests/cilium/olm/* ${installer_dir}/manifests/
+    cp catalog/manifests/cilium/olm/* "${installer_dir}/manifests/"
 
     gen_cluster_domain=$(yq e '.spec.baseDomain' \
       "${installer_dir}/manifests/cluster-dns-02-config.yml")
@@ -471,8 +471,8 @@ steps:
 
     mc alias set \
       "${INPUT_commodore_cluster_id}" "https://objects.${INPUT_cloudscale_region}.cloudscale.ch" \
-      $(echo "$INPUT_bucket_user" | jq -r '.keys[0].access_key') \
-      $(echo "$INPUT_bucket_user" | jq -r '.keys[0].secret_key')
+      "$(echo "$INPUT_bucket_user" | jq -r '.keys[0].access_key')" \
+      "$(echo "$INPUT_bucket_user" | jq -r '.keys[0].secret_key')"
 
     mc cp "${installer_dir}/bootstrap.ign" "${INPUT_commodore_cluster_id}/${INPUT_commodore_cluster_id}-bootstrap-ignition/"
 
@@ -480,7 +480,7 @@ steps:
       --json --expire=4h \
       "${INPUT_commodore_cluster_id}/${INPUT_commodore_cluster_id}-bootstrap-ignition/bootstrap.ign" | jq -r '.share')
 
-    env -i "ignition_bootstrap=$ignition_bootstrap" >> $OUTPUT
+    env -i "ignition_bootstrap=$ignition_bootstrap" >> "$OUTPUT"
 
     echo "✅ OpenShift installer configured successfully."
 
@@ -491,7 +491,6 @@ steps:
   - name: commodore_api_url
   - name: commodore_cluster_id
   - name: commodore_tenant_id
-  - name: cloudscale_region
   - name: ssh_public_key_path
   - name: hieradata_repo_user
   - name: base_domain
@@ -548,7 +547,7 @@ steps:
 
     commodore catalog compile ${INPUT_commodore_cluster_id} --push \
       --dynamic-fact kubernetesVersion.major=1 \
-      --dynamic-fact kubernetesVersion.minor="$((${INPUT_image_minor}+13))" \
+      --dynamic-fact kubernetesVersion.minor="$((INPUT_image_minor+13))" \
       --dynamic-fact openshiftVersion.Major=${INPUT_image_major} \
       --dynamic-fact openshiftVersion.Minor=${INPUT_image_minor}
 
@@ -564,7 +563,6 @@ steps:
   - name: gitlab_user_name
   - name: gitlab_api_token
   - name: commodore_cluster_id
-  - name: commodore_tenant_id
   - name: commodore_api_url
   - name: cluster_domain
   outputs:
@@ -669,7 +667,7 @@ steps:
     echo "Waiting for HAproxy ..."
     while true; do
       curl --connect-timeout 1 "http://api.${INPUT_cluster_domain}:6443" &>/dev/null || exit_code=$?
-      if [ $exit_code -eq 52 ]; then
+      if [ "$exit_code" -eq 52 ]; then
         echo "  HAproxy up!"
         break
       else
@@ -680,14 +678,14 @@ steps:
 
     echo "updating ssh config..."
     ssh management2.corp.vshn.net "sshop --output-archive /dev/stdout" | tar -C ~ -xzf -
-    echo done
+    echo "done"
 
     echo "waiting for ssh access ..."
     ssh "${lb1}" hostname -f
     ssh "${lb2}" hostname -f
 
-    env -i "lb_fqdn_1=$lb1" >> $OUTPUT
-    env -i "lb_fqdn_2=$lb2" >> $OUTPUT
+    env -i "lb_fqdn_1=$lb1" >> "$OUTPUT"
+    env -i "lb_fqdn_2=$lb2" >> "$OUTPUT"
 
 - match: And I provision the bootstrap node
   description: |-
@@ -701,7 +699,6 @@ steps:
   - name: gitlab_user_name
   - name: gitlab_api_token
   - name: commodore_cluster_id
-  - name: commodore_tenant_id
   - name: commodore_api_url
   - name: lb_fqdn_1
   - name: lb_fqdn_2
@@ -789,7 +786,7 @@ steps:
       sleep 5
     done && echo "✅ API is up"
 
-    env -i "kubeconfig_path=${installer_dir}/auth/kubeconfig" >> $OUTPUT
+    env -i "kubeconfig_path=${installer_dir}/auth/kubeconfig" >> "$OUTPUT"
 
 - match: And I store the subnet ID and floating IP in the Syn hierarchy
   description: |-
@@ -855,9 +852,9 @@ steps:
     INGRESS_FLOATING_IP="$(terraform output -raw router_vip)"
     pushd ../../../inventory/classes/${INPUT_commodore_tenant_id}
 
-    yq eval -i '.parameters.openshift.cloudscale.subnet_uuid = "'$SUBNET_UUID'"' \
+    yq eval -i '.parameters.openshift.cloudscale.subnet_uuid = "'"$SUBNET_UUID"'"' \
       ${INPUT_commodore_cluster_id}.yml
-    yq eval -i '.parameters.openshift.cloudscale.ingress_floating_ip_v4 = "'$INGRESS_FLOATING_IP'"' \
+    yq eval -i '.parameters.openshift.cloudscale.ingress_floating_ip_v4 = "'"$INGRESS_FLOATING_IP"'"' \
       ${INPUT_commodore_cluster_id}.yml
 
     if not git diff-index --quiet HEAD
@@ -872,7 +869,7 @@ steps:
     # Recompile the catalog
     commodore catalog compile ${INPUT_commodore_cluster_id} --push \
       --dynamic-fact kubernetesVersion.major=1 \
-      --dynamic-fact kubernetesVersion.minor="$((${INPUT_image_minor}+13))" \
+      --dynamic-fact kubernetesVersion.minor="$((INPUT_image_minor+13))" \
       --dynamic-fact openshiftVersion.Major=${INPUT_image_major} \
       --dynamic-fact openshiftVersion.Minor=${INPUT_image_minor}
 
@@ -888,7 +885,6 @@ steps:
   - name: gitlab_user_name
   - name: gitlab_api_token
   - name: commodore_cluster_id
-  - name: commodore_tenant_id
   - name: commodore_api_url
   - name: kubeconfig_path
   - name: cluster_domain
@@ -1008,15 +1004,12 @@ steps:
     cert-manager,  machine-api-provider, machinesets, loadbalancer controller,
     and ingress loadbalancer.
   inputs:
-  - name: commodore_cluster_id
-  - name: commodore_tenant_id
   - name: commodore_api_url
   - name: vault_address
   - name: kubeconfig_path
   run: |
     set -euo pipefail
     export COMMODORE_API_URL="${INPUT_commodore_api_url}"
-    installer_dir="$(pwd)/target"
     export KUBECONFIG="${INPUT_kubeconfig_path}"
 
     export VAULT_ADDR=${INPUT_vault_address}
@@ -1026,12 +1019,13 @@ steps:
     kubectl apply -f catalog/manifests/cert-manager/00_namespace.yaml
     kubectl apply -Rf catalog/manifests/cert-manager/10_cert_manager
     kubectl -n syn-cert-manager patch --type=merge \
-      $(kubectl -n syn-cert-manager get deploy -oname) \
+      "$(kubectl -n syn-cert-manager get deploy -oname)" \
       -p '{"spec":{"template":{"spec":{"tolerations":[{"operator":"Exists"}]}}}}'
     echo '# Applied cert-manager. #'
     echo
     echo '# Applying machine-api-provider ... #'
-    export VAULT_TOKEN=$(vault token lookup -format=json | jq -r .data.id)
+    VAULT_TOKEN=$(vault token lookup -format=json | jq -r .data.id)
+    export VAULT_TOKEN
     kapitan refs --reveal --refs-path catalog/refs -f catalog/manifests/machine-api-provider-cloudscale/00_secrets.yaml | kubectl apply -f -
     kubectl apply  -f catalog/manifests/machine-api-provider-cloudscale/10_clusterRoleBinding.yaml
     kubectl apply -f catalog/manifests/machine-api-provider-cloudscale/10_serviceAccount.yaml
@@ -1039,7 +1033,9 @@ steps:
     echo '# Applied machine-api-provider. #'
     echo
     echo '# Applying machinesets ... #'
-    kubectl apply `for f in catalog/manifests/openshift4-nodes/machineset-*.yaml ; do echo -n "-f $f " ; done`
+    # shellcheck disable=2046
+    kubectl apply $( for f in catalog/manifests/openshift4-nodes/machineset-*.yaml ; do echo -n "-f $f " ; done )
+    # We do not want to quote the $() expression because we *want* it to be word-split.
     echo '# Applied machinesets. #'
     echo
     echo '# Applying loadbalancer controller ... #'
@@ -1091,7 +1087,6 @@ steps:
     set -euo pipefail
 
     export COMMODORE_API_URL="${INPUT_commodore_api_url}"
-    installer_dir="$(pwd)/target"
 
     cat <<EOF > ./terraform.env
     CLOUDSCALE_API_TOKEN=${INPUT_cloudscale_token}
@@ -1169,7 +1164,6 @@ steps:
   run: |
     set -euo pipefail
     export COMMODORE_API_URL="${INPUT_commodore_api_url}"
-    installer_dir="$(pwd)/target"
     export KUBECONFIG="${INPUT_kubeconfig_path}"
 
     echo '# Patching cilium ... #'
@@ -1193,8 +1187,8 @@ steps:
     echo '# Enabled proxy protocol. #'
     echo
 
-    distribution=$(curl -sH "Authorization: Bearer $(commodore fetch-token)" ${COMMODORE_API_URL}/clusters/${INPUT_commodore_cluster_id} | jq -r .facts.distribution)
-    if [[ distribution != "oke" ]]
+    distribution="$(curl -sH "Authorization: Bearer $(commodore fetch-token)" ${COMMODORE_API_URL}/clusters/${INPUT_commodore_cluster_id} | jq -r .facts.distribution)"
+    if [[ "$distribution" != "oke" ]]
     then
       echo '# Scheduling ingress controller on infra nodes ... #'
       kubectl -n openshift-ingress-operator patch ingresscontroller default --type=json \
@@ -1209,7 +1203,7 @@ steps:
 
     echo '# Removing temporary cert-manager tolerations ... #'
     kubectl -n syn-cert-manager patch --type=json \
-      $(kubectl -n syn-cert-manager get deploy -oname) \
+      "$(kubectl -n syn-cert-manager get deploy -oname)" \
       -p '[{"op":"remove","path":"/spec/template/spec/tolerations"}]'
     echo '# Removed temporary cert-manager tolerations. #'
 

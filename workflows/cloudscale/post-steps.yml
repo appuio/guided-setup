@@ -5,6 +5,7 @@ steps:
   inputs:
   - name: lb_fqdn_1
   - name: lb_fqdn_2
+  - name: gitlab_api_token
   - name: commodore_cluster_id
   run: |
     set -euo pipefail
@@ -34,7 +35,7 @@ steps:
     EOF
     fi
 
-    git add *.yaml
+    git add ./*.yaml
 
     if not git diff-index --quiet HEAD
     then
@@ -82,7 +83,7 @@ steps:
 
     numconfs="$( kubectl -n appuio-openshift-upgrade-controller get upgradeconfig -oyaml | yq '.items | length' )"
 
-    if (( $numconfs < 1 ))
+    if (( numconfs < 1 ))
     then
       kubectl -n appuio-openshift-upgrade-controller get upgradeconfig
       echo
@@ -95,8 +96,8 @@ steps:
 
     echo '# Scheduling a first maintenance ...'
 
-    uc=$(yq .parameters.facts.maintenance_window inventory/classes/params/cluster.yml)
-    kubectl -n appuio-openshift-upgrade-controller get upgradeconfig $uc -oyaml | \
+    uc="$(yq .parameters.facts.maintenance_window inventory/classes/params/cluster.yml)"
+    kubectl -n appuio-openshift-upgrade-controller get upgradeconfig "$uc" -oyaml | \
       yq '
         .metadata.name = "first",
         .metadata.labels = {},
@@ -179,7 +180,7 @@ steps:
     echo '#########################################################'
     echo
     echo "Run the following:"
-    echo "cd `pwd`/openshift4-clusters/${INPUT_commodore_cluster_id}"
+    echo "cd $(pwd)/openshift4-clusters/${INPUT_commodore_cluster_id}"
     echo "direnv allow"
     echo "oc whoami"
     echo "git push origin main   # only if everything is OK"

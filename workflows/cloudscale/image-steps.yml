@@ -22,22 +22,22 @@ steps:
 
     image_path="rhcos-$MAJOR.$MINOR.qcow2"
 
-    env -i "image_major=$MAJOR" >> $OUTPUT
-    env -i "image_minor=$MINOR" >> $OUTPUT
-    env -i "image_patch=$PATCH" >> $OUTPUT
+    env -i "image_major=$MAJOR" >> "$OUTPUT"
+    env -i "image_minor=$MINOR" >> "$OUTPUT"
+    env -i "image_patch=$PATCH" >> "$OUTPUT"
 
     echo "Image is $image_path"
 
     if [ -f "$image_path" ]; then
       echo "Image $image_path already exists, skipping download."
-      env -i "image_path=$image_path" >> $OUTPUT
+      env -i "image_path=$image_path" >> "$OUTPUT"
       exit 0
     fi
 
     echo Downloading OpenShift image "$MATCH_image_name" to "$image_path"
 
     curl -L "https://mirror.openshift.com/pub/openshift-v4/dependencies/rhcos/${MAJOR}.${MINOR}/${MATCH_image_name}/rhcos-${MATCH_image_name}-x86_64-openstack.x86_64.qcow2.gz" | gzip -d > "$image_path"
-    env -i "image_path=$image_path" >> $OUTPUT
+    env -i "image_path=$image_path" >> "$OUTPUT"
 
 - match: And I set up required S3 buckets
   description: |-
@@ -68,8 +68,8 @@ steps:
 
     mc alias set \
       "${INPUT_commodore_cluster_id}" "https://objects.${INPUT_cloudscale_region}.cloudscale.ch" \
-      $(echo $response | jq -r '.keys[0].access_key') \
-      $(echo $response | jq -r '.keys[0].secret_key')
+      "$(echo "$response" | jq -r '.keys[0].access_key')" \
+      "$(echo "$response" | jq -r '.keys[0].secret_key')"
 
     echo -n "Waiting for S3 credentials to become available ..."
     until mc ls > /dev/null 2>&1
@@ -86,8 +86,10 @@ steps:
     mc mb --ignore-existing \
       "${INPUT_commodore_cluster_id}/${INPUT_commodore_cluster_id}-logstore"
 
-    export AWS_ACCESS_KEY_ID=$(mc alias list ${INPUT_commodore_cluster_id} -json | jq -r .accessKey)
-    export AWS_SECRET_ACCESS_KEY=$(mc alias list ${INPUT_commodore_cluster_id} -json | jq -r .secretKey)
+    keyid=$(mc alias list ${INPUT_commodore_cluster_id} -json | jq -r .accessKey)
+    export AWS_ACCESS_KEY_ID="${keyid}"
+    secretkey=$(mc alias list ${INPUT_commodore_cluster_id} -json | jq -r .secretKey)
+    export AWS_SECRET_ACCESS_KEY="${secretkey}"
 
     echo "Configuring S3 bucket policies..."
     aws s3api put-public-access-block \
@@ -111,7 +113,7 @@ steps:
       }'
     echo "S3 buckets are set up."
 
-    env -i "bucket_user=$(echo $response | jq -c .)" >> $OUTPUT
+    env -i "bucket_user=$(echo "$response" | jq -c .)" >> "$OUTPUT"
 
 - match: And I import the image in Cloudscale
   description: |-
@@ -142,8 +144,8 @@ steps:
 
     mc alias set \
       "${INPUT_commodore_cluster_id}" "https://objects.${INPUT_cloudscale_region}.cloudscale.ch" \
-      $(echo "$INPUT_bucket_user" | jq -r '.keys[0].access_key') \
-      $(echo "$INPUT_bucket_user" | jq -r '.keys[0].secret_key')
+      "$(echo "$INPUT_bucket_user" | jq -r '.keys[0].access_key')" \
+      "$(echo "$INPUT_bucket_user" | jq -r '.keys[0].secret_key')"
 
     echo "Uploading Red Hat CoreOS image '$INPUT_image_path' to S3 bucket '${INPUT_commodore_cluster_id}-image-registry'..."
     mc cp "rhcos-${INPUT_image_major}.${INPUT_image_minor}.qcow2" "${INPUT_commodore_cluster_id}/${INPUT_commodore_cluster_id}-bootstrap-ignition/"

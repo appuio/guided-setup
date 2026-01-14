@@ -25,7 +25,7 @@ steps:
     export KUBECONFIG="em-${INPUT_commodore_cluster_id}"
     kubectl get nodes
 
-    env -i "kubeconfig_path=$(pwd)/em-${INPUT_commodore_cluster_id}" >> $OUTPUT
+    env -i "kubeconfig_path=$(pwd)/em-${INPUT_commodore_cluster_id}" >> "$OUTPUT"
 - match: Then I confirm cluster deletion
   description: |-
     This step asks you to confirm with 4 eyes whether this cluster is really to be deleted.
@@ -38,7 +38,7 @@ steps:
       Confirm this cluster ID according to the 4-eye principle. You and one colleague should agree on the cluster that is to be deleted.
   run: |
     set -euo pipefail
-    if [[ ${INPUT_commodore_cluster_id} != ${INPUT_4_eye_confirmation} ]]
+    if [[ "${INPUT_commodore_cluster_id}" != "${INPUT_4_eye_confirmation}" ]]
     then
       echo "Cluster domain and confirmation do not match."
       exit 1
@@ -156,9 +156,7 @@ steps:
   - name: gitlab_user_name
   - name: gitlab_api_token
   - name: commodore_cluster_id
-  - name: commodore_tenant_id
   - name: commodore_api_url
-  - name: cluster_domain
   outputs:
   - name: lb_fqdn_1
   - name: lb_fqdn_2
@@ -229,12 +227,12 @@ steps:
     icinga1=$(ssh "$lb1" "sudo grep 'ParentZone' /etc/icinga2/constants.conf | awk '{  print substr(\$4, 2, length(\$4)-2) }'" )
     icinga2=$(ssh "$lb2" "sudo grep 'ParentZone' /etc/icinga2/constants.conf | awk '{  print substr(\$4, 2, length(\$4)-2) }'" )
 
-    env -i "lb_fqdn_1=$lb1" >> $OUTPUT
-    env -i "lb_fqdn_2=$lb2" >> $OUTPUT
-    env -i "lb_backup_1=$backup1" >> $OUTPUT
-    env -i "lb_backup_2=$backup2" >> $OUTPUT
-    env -i "lb_icinga_1=$icinga1" >> $OUTPUT
-    env -i "lb_icinga_2=$icinga2" >> $OUTPUT
+    env -i "lb_fqdn_1=$lb1" >> "$OUTPUT"
+    env -i "lb_fqdn_2=$lb2" >> "$OUTPUT"
+    env -i "lb_backup_1=$backup1" >> "$OUTPUT"
+    env -i "lb_backup_2=$backup2" >> "$OUTPUT"
+    env -i "lb_icinga_1=$icinga1" >> "$OUTPUT"
+    env -i "lb_icinga_2=$icinga2" >> "$OUTPUT"
     popd
 
 - match: And I downtime the loadbalancers in icinga
@@ -268,13 +266,11 @@ steps:
   - name: gitlab_user_name
   - name: gitlab_api_token
   - name: commodore_cluster_id
-  - name: commodore_tenant_id
   - name: commodore_api_url
   run: |
     set -euo pipefail
 
     export COMMODORE_API_URL="${INPUT_commodore_api_url}"
-    installer_dir="$(pwd)/target"
 
     cat <<EOF > ./terraform.env
     CLOUDSCALE_API_TOKEN=${INPUT_cloudscale_token}
@@ -357,8 +353,8 @@ steps:
     # configure minio client to use the bucket
     mc alias set \
       "${INPUT_commodore_cluster_id}" "https://objects.${INPUT_cloudscale_region}.cloudscale.ch" \
-      $(echo $response | jq -r '.keys[0].access_key') \
-      $(echo $response | jq -r '.keys[0].secret_key')
+      "$(echo "$response" | jq -r '.keys[0].access_key')" \
+      "$(echo "$response" | jq -r '.keys[0].secret_key')"
 
     # delete bootstrap-ignition bucket (should already be deleted after setup)
     mc rb "${INPUT_commodore_cluster_id}/${INPUT_commodore_cluster_id}-bootstrap-ignition" --force
@@ -374,10 +370,8 @@ steps:
     This step deletes the cluster's associated backup bucket from Cloudscale.
   inputs:
   - name: cloudscale_token
-  - name: cloudscale_region
   - name: vault_address
   - name: commodore_cluster_id
-  - name: commodore_tenant_id
   - name: commodore_api_url
   - name: backup_deletion_confirmation
     description: |-
@@ -402,7 +396,7 @@ steps:
     export COMMODORE_API_URL="${INPUT_commodore_api_url}"
 
     LIEUTENANT_AUTH="Authorization: Bearer $(commodore fetch-token)"
-    REPO_URL=$(curl -sH "${LIEUTENANT_AUTH}" "${INPUT_commodore_api_url}/clusters/${INPUT_commodore_cluster_id}" | jq -r .gitRepo.url)
+    REPO_URL="$(curl -sH "${LIEUTENANT_AUTH}" "${INPUT_commodore_api_url}/clusters/${INPUT_commodore_cluster_id}" | jq -r .gitRepo.url)"
 
     if [ -e catalog ]
     then
@@ -410,7 +404,7 @@ steps:
     fi
 
     mkdir catalog
-    git archive --remote ${REPO_URL} master | tar -xC catalog
+    git archive --remote "${REPO_URL}" master | tar -xC catalog
 
     export VAULT_ADDR=${INPUT_vault_address}
     vault login -method=oidc
@@ -437,8 +431,8 @@ steps:
     export AWS_SECRET_ACCESS_KEY="$aws_secret"
 
     # retrieve latest restic snapshots
-    OBJECT_ID=`restic snapshots -H syn-cluster-backup --latest 1 --json | jq -r .[-1].id`
-    ETCD_ID=`restic snapshots -H syn-cluster-backup-etcd --latest 1 --json | jq -r .[-1].id`
+    OBJECT_ID="$(restic snapshots -H syn-cluster-backup --latest 1 --json | jq -r .[-1].id)"
+    ETCD_ID="$(restic snapshots -H syn-cluster-backup-etcd --latest 1 --json | jq -r .[-1].id)"
 
     mkdir -p backup-dump-${INPUT_commodore_cluster_id}
 
@@ -454,14 +448,14 @@ steps:
     # configure minio client to use the bucket
     mc alias set \
       "${INPUT_commodore_cluster_id}_backup" "${S3_ENDPOINT##s3:}" \
-      $(echo $response | jq -r '.keys[0].access_key') \
-      $(echo $response | jq -r '.keys[0].secret_key')
+      "$(echo "$response" | jq -r '.keys[0].access_key')" \
+      "$(echo "$response" | jq -r '.keys[0].secret_key')"
 
     # Delete bucket
     mc rb "${INPUT_commodore_cluster_id}_backup/${INPUT_commodore_cluster_id}-cluster-backup" --force
 
     # Delete object user
-    curl -i -H "Authorization: Bearer ${INPUT_cloudscale_token}" -X DELETE $(echo $response | jq -r '.href')
+    curl -i -H "Authorization: Bearer ${INPUT_cloudscale_token}" -X DELETE "$(echo "$response" | jq -r '.href')"
 
 - match: And I delete the cluster's API tokens
   description: |-
@@ -469,8 +463,6 @@ steps:
   inputs:
   - name: cloudscale_token
   - name: cloudscale_token_floaty
-  - name: cloudscale_region
-  - name: commodore_cluster_id
   run: |
     set -euo pipefail
     echo '##############################################################'
@@ -481,7 +473,7 @@ steps:
     echo '##############################################################'
 
     echo -n "Checking for deletion of main Cloudscale token ..."
-    while [[ `curl -sH "Authorization: Bearer ${INPUT_cloudscale_token}" https://api.cloudscale.ch/v1/flavors -o /dev/null -w"%{http_code}"` != 401 ]]
+    while [[ $(curl -sH "Authorization: Bearer ${INPUT_cloudscale_token}" https://api.cloudscale.ch/v1/flavors -o /dev/null -w"%{http_code}") != 401 ]]
     do
       echo -n .
       sleep 3
@@ -489,7 +481,7 @@ steps:
     echo " Success."
 
     echo -n "Checking for deletion of Floaty Cloudscale token ..."
-    while [[ `curl -sH "Authorization: Bearer ${INPUT_cloudscale_token_floaty}" https://api.cloudscale.ch/v1/flavors -o /dev/null -w"%{http_code}"` != 401 ]]
+    while [[ $(curl -sH "Authorization: Bearer ${INPUT_cloudscale_token_floaty}" https://api.cloudscale.ch/v1/flavors -o /dev/null -w"%{http_code}") != 401 ]]
     do
       echo -n .
       sleep 3
@@ -522,7 +514,6 @@ steps:
     This step decommissions resources associated with the Puppet managed LoadBalancers.
   inputs:
   - name: commodore_cluster_id
-  - name: control_vshn_api_token
   - name: lb_fqdn_1
   - name: lb_fqdn_2
   - name: lb_backup_1
@@ -532,7 +523,9 @@ steps:
   run: |
     set -euo pipefail
     echo "# Clearing encdata caches ... #"
+    # shellcheck disable=2029
     ssh nfs1.ch1.puppet.vshn.net "sudo rm /srv/nfs/export/puppetserver-puppetserver-enc-cache-pvc-*/${INPUT_lb_fqdn_1}.yaml" || true
+    # shellcheck disable=2029
     ssh nfs1.ch1.puppet.vshn.net "sudo rm /srv/nfs/export/puppetserver-puppetserver-enc-cache-pvc-*/${INPUT_lb_fqdn_2}.yaml" || true
     echo "# Cleared encdata caches. #"
     echo
@@ -544,8 +537,10 @@ steps:
       else
         icinga_host="master3.prod.monitoring.vshn.net"
       fi
-      echo Cleaning up LB from $icinga_host ...
+      echo "Cleaning up LB from $icinga_host ..."
+      # shellcheck disable=2029
       ssh "${icinga_host}" "sudo rm -rf /var/lib/icinga2/api/zones/${INPUT_lb_fqdn_1}" || true
+      # shellcheck disable=2029
       ssh "${icinga_host}" "sudo rm -rf /var/lib/icinga2/api/zones/${INPUT_lb_fqdn_2}" || true
       if [ "$parent_zone" != "master" ]; then
         echo "Running puppet on ${icinga_host}"
@@ -599,9 +594,12 @@ steps:
     do
       for backup_server in "${INPUT_lb_backup_1}" "${INPUT_lb_backup_2}"
       do
+        # shellcheck disable=2029
         ssh "$backup_server" "sudo rm /var/lib/burp/CA/${lb}.crt" || true
+        # shellcheck disable=2029
         ssh "$backup_server" "sudo rm /var/lib/burp/CA/${lb}.csr" || true
         backup="/var/lib/burp/${lb}"
+        # shellcheck disable=2029
         ssh "$backup_server" "sudo rm -rf ${backup}" || true
       done
     done
@@ -624,7 +622,6 @@ steps:
     This step cleans up all the cluster's Vault secrets.
   inputs:
   - name: commodore_cluster_id
-  - name: commodore_tenant_id
   - name: commodore_api_url
   - name: vault_address
   - name: backup_deletion_confirmation
@@ -641,7 +638,7 @@ steps:
     fi
 
     mkdir catalog
-    git archive --remote ${REPO_URL} master | tar -xC catalog
+    git archive --remote "${REPO_URL}" master | tar -xC catalog
 
     PASSWORD_KEY="$(yq -o=json 'select(.kind == "Secret" and .metadata.name == "objects-backup-password") | .stringData.password' catalog/manifests/cluster-backup/10_object.yaml | cut -d: -f2)"
     ID_KEY="$(yq -o=json 'select(.kind == "Secret" and .metadata.name == "objects-backup-s3-credentials") | .stringData.username' catalog/manifests/cluster-backup/10_object.yaml | cut -d: -f2)"
@@ -752,9 +749,9 @@ steps:
 
       auth="PRIVATE-TOKEN: ${INPUT_gitlab_api_token}"
 
-      response=`curl -s -XPOST -H"$auth" -H"Content-Type: application/json" https://git.vshn.net/api/v4/projects/57660/merge_requests -d'{"source_branch":"'remove-${INPUT_commodore_cluster_id}'","target_branch":"main","title":"Remove cluster '${INPUT_commodore_cluster_id}'"}'`
+      response=$( curl -s -XPOST -H"$auth" -H"Content-Type: application/json" https://git.vshn.net/api/v4/projects/57660/merge_requests -d'{"source_branch":"'remove-${INPUT_commodore_cluster_id}'","target_branch":"main","title":"Remove cluster '${INPUT_commodore_cluster_id}'"}' )
       echo
-      echo ">>> Please review and merge the MR at "`echo $response | jq -r .web_url`
+      echo ">>> Please review and merge the MR at $( echo "$response" | jq -r .web_url )"
       echo
     fi || true
     popd

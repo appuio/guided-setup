@@ -50,7 +50,6 @@ steps:
     This step ensures CNAME records exist for ACME challenges once cert-manager is properly deployed.
   inputs:
   - name: kubeconfig_path
-  - name: cluster_domain
   run: |
     set -euo pipefail
     export KUBECONFIG="${INPUT_kubeconfig_path}"
@@ -69,8 +68,8 @@ steps:
 
     dnstmp=$(mktemp)
 
-    echo "_acme-challenge.api   IN CNAME $fulldomain." > $dnstmp
-    echo "_acme-challenge.apps  IN CNAME $fulldomain." >> $dnstmp
+    echo "_acme-challenge.api   IN CNAME $fulldomain." > "$dnstmp"
+    echo "_acme-challenge.apps  IN CNAME $fulldomain." >> "$dnstmp"
 
     echo "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@"
     echo "@                                                                                       @"
@@ -126,7 +125,7 @@ steps:
     kubectl wait --for=create secret/acme-dns-client -nsyn-cert-manager
 
     echo '# Waiting for emergency credential tokens ...'
-    until kubectl -n appuio-emergency-credentials-controller get emergencyaccounts.cluster.appuio.io -o=jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.status.lastTokenCreationTimestamp}{"\n"}{end}' | grep `date '+%Y'` >/dev/null
+    until kubectl -n appuio-emergency-credentials-controller get emergencyaccounts.cluster.appuio.io -o=jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.status.lastTokenCreationTimestamp}{"\n"}{end}' | grep "$( date '+%Y' )" >/dev/null
     do
       echo -n .
     done
@@ -140,7 +139,7 @@ steps:
     kubectl get nodes
     oc whoami | grep system:serviceaccount:appuio-emergency-credentials-controller: || exit 1
 
-    env -i "kubeconfig_path=$(pwd)/em-${INPUT_commodore_cluster_id}" >> $OUTPUT
+    env -i "kubeconfig_path=$(pwd)/em-${INPUT_commodore_cluster_id}" >> "$OUTPUT"
 
     echo "#  Invalidating 10-year admin kubeconfig ..."
     kubectl -n openshift-config patch cm admin-kubeconfig-client-ca --type=merge -p '{"data": {"ca-bundle.crt": ""}}'
@@ -214,7 +213,7 @@ steps:
     echo '# Checking image registry pods ...'
     numpods="$( kubectl -n openshift-image-registry get pods -l docker-registry=default --field-selector=status.phase==Running -oyaml | yq '.items  | length' )"
 
-    if (( $numpods != 2 ))
+    if (( numpods != 2 ))
     then
       kubectl -n openshift-image-registry get pods -l docker-registry=default
       echo
