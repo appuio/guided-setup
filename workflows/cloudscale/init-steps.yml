@@ -7,32 +7,32 @@ steps:
     set -euo pipefail
     echo "Checking prerequisites..."
 
-    which yq >/dev/null 2>&1 && { echo "✅ yq is installed."; } || { echo "❌ yq is not installed. Please install yq to proceed."; exit 1; }
-    yq --version | grep -E 'version v[4-9]\.' | grep 'mikefarah' >/dev/null 2>&1 && { echo "✅ yq by mikefarah version 4 or higher is installed."; } || { echo "❌ yq version 4 or higher is required. Please upgrade yq to proceed."; exit 1; }
+    if which yq >/dev/null 2>&1 ; then { echo "✅ yq is installed."; } ; else { echo "❌ yq is not installed. Please install yq to proceed."; exit 1; } ; fi
+    if yq --version | grep -E 'version v[4-9]\.' | grep 'mikefarah' >/dev/null 2>&1 ; then { echo "✅ yq by mikefarah version 4 or higher is installed."; } ; else { echo "❌ yq version 4 or higher is required. Please upgrade yq to proceed."; exit 1; } ; fi
 
-    which jq >/dev/null 2>&1 && { echo "✅ jq is installed."; } || { echo "❌ jq is not installed. Please install jq to proceed."; exit 1; }
+    if which jq >/dev/null 2>&1 ; then { echo "✅ jq is installed."; } ; else { echo "❌ jq is not installed. Please install jq to proceed."; exit 1; } ; fi
 
-    which oc >/dev/null 2>&1 && { echo "✅ oc (OpenShift CLI) is installed."; } || { echo "❌ oc (OpenShift CLI) is not installed. Please install oc to proceed."; exit 1; }
+    if which oc >/dev/null 2>&1 ; then { echo "✅ oc (OpenShift CLI) is installed."; } ; else { echo "❌ oc (OpenShift CLI) is not installed. Please install oc to proceed."; exit 1; } ; fi
 
-    which vault >/dev/null 2>&1 && { echo "✅ vault (HashiCorp Vault) is installed."; } || { echo "❌ vault (HashiCorp Vault) is not installed. Please install vault to proceed."; exit 1; }
+    if which vault >/dev/null 2>&1 ; then { echo "✅ vault (HashiCorp Vault) is installed."; } ; else { echo "❌ vault (HashiCorp Vault) is not installed. Please install vault to proceed."; exit 1; } ; fi
 
-    which curl >/dev/null 2>&1 && { echo "✅ curl is installed."; } || { echo "❌ curl is not installed. Please install curl to proceed."; exit 1; }
+    if which curl >/dev/null 2>&1 ; then { echo "✅ curl is installed."; } ; else { echo "❌ curl is not installed. Please install curl to proceed."; exit 1; } ; fi
 
-    which docker >/dev/null 2>&1 && { echo "✅ docker is installed."; } || { echo "❌ docker is not installed. Please install docker to proceed."; exit 1; }
+    if which docker >/dev/null 2>&1 ; then { echo "✅ docker is installed."; } ; else { echo "❌ docker is not installed. Please install docker to proceed."; exit 1; } ; fi
 
-    which glab >/dev/null 2>&1 && { echo "✅ glab (GitLab CLI) is installed."; } || { echo "❌ glab (GitLab CLI) is not installed. Please install glab to proceed."; exit 1; }
+    if which glab >/dev/null 2>&1 ; then { echo "✅ glab (GitLab CLI) is installed."; } ; else { echo "❌ glab (GitLab CLI) is not installed. Please install glab to proceed."; exit 1; } ; fi
 
-    which host >/dev/null 2>&1 && { echo "✅ host (DNS lookup utility) is installed."; } || { echo "❌ host (DNS lookup utility) is not installed. Please install host to proceed."; exit 1; }
+    if which host >/dev/null 2>&1 ; then { echo "✅ host (DNS lookup utility) is installed."; } ; else { echo "❌ host (DNS lookup utility) is not installed. Please install host to proceed."; exit 1; } ; fi
 
-    which mc >/dev/null 2>&1 && { echo "✅ mc (MinIO Client) is installed."; } || { echo "❌ mc (MinIO Client) is not installed. Please install mc >= RELEASE.2024-01-18T07-03-39Z to proceed."; exit 1; }
+    if which mc >/dev/null 2>&1 ; then { echo "✅ mc (MinIO Client) is installed."; } ; else { echo "❌ mc (MinIO Client) is not installed. Please install mc >= RELEASE.2024-01-18T07-03-39Z to proceed."; exit 1; } ; fi
     mc_version=$(mc --version | grep -Eo 'RELEASE[^ ]+')
-    echo "$mc_version" | grep -E 'RELEASE\.202[4-9]-' >/dev/null 2>&1 && { echo "✅ mc version ${mc_version} is sufficient."; } || { echo "❌ mc version ${mc_version} is insufficient. Please upgrade mc to >= RELEASE.2024-01-18T07-03-39Z to proceed."; exit 1; }
+    if echo "$mc_version" | grep -E 'RELEASE\.202[4-9]-' >/dev/null 2>&1 ; then { echo "✅ mc version ${mc_version} is sufficient."; } ; else { echo "❌ mc version ${mc_version} is insufficient. Please upgrade mc to >= RELEASE.2024-01-18T07-03-39Z to proceed."; exit 1; } ; fi
 
-    which aws >/dev/null 2>&1 && { echo "✅ aws (AWS CLI) is installed."; } || { echo "❌ aws (AWS CLI) is not installed. Please install aws to proceed. Our recommended installer is uv: 'uv tool install awscli'"; exit 1; }
+    if which aws >/dev/null 2>&1 ; then { echo "✅ aws (AWS CLI) is installed."; } ; else { echo "❌ aws (AWS CLI) is not installed. Please install aws to proceed. Our recommended installer is uv: 'uv tool install awscli'"; exit 1; } ; fi
 
-    which restic >/dev/null 2>&1 && { echo "✅ restic (Backup CLI) is installed."; } || { echo "❌ restic (Backup CLI) is not installed. Please install restic to proceed."; exit 1; }
+    if which restic >/dev/null 2>&1 ; then { echo "✅ restic (Backup CLI) is installed."; } ; else { echo "❌ restic (Backup CLI) is not installed. Please install restic to proceed."; exit 1; } ; fi
 
-    which emergency-credentials-receive >/dev/null 2>&1 && { echo "✅ emergency-credentials-receive (Cluster emergency access helper) is installed."; } || { echo "❌ emergency-credentials-receive is not installed. Please install it from https://github.com/vshn/emergency-credentials-receive ."; exit 1; }
+    if which emergency-credentials-receive >/dev/null 2>&1 ; then { echo "✅ emergency-credentials-receive (Cluster emergency access helper) is installed."; } ; else { echo "❌ emergency-credentials-receive is not installed. Please install it from https://github.com/vshn/emergency-credentials-receive ."; exit 1; } ; fi
 
     echo "✅ All prerequisites are met."
 - match: And I have the `openshift-install` binary for version "(?P<ocp_version>[^"]+)"
@@ -99,11 +99,11 @@ steps:
 
     echo "Retrieving Commodore tenant ID for cluster ID '$INPUT_commodore_cluster_id' from API at '$INPUT_commodore_api_url'..."
     tenant_id=$(curl -sH "Authorization: Bearer $(commodore fetch-token)" ${COMMODORE_API_URL}/clusters/${INPUT_commodore_cluster_id} | jq -r .tenant)
-    echo "$tenant_id" | grep 't-' >/dev/null 2>&1 && { echo "✅ Retrieved tenant ID '$tenant_id' for cluster ID '$INPUT_commodore_cluster_id'."; } || { echo "❌ Failed to retrieve valid tenant ID for cluster ID '$INPUT_commodore_cluster_id'. Got '$tenant_id'. Please check your Commodore API access and cluster ID."; exit 1; }
+    if echo "$tenant_id" | grep 't-' >/dev/null 2>&1 ; then { echo "✅ Retrieved tenant ID '$tenant_id' for cluster ID '$INPUT_commodore_cluster_id'."; } else { echo "❌ Failed to retrieve valid tenant ID for cluster ID '$INPUT_commodore_cluster_id'. Got '$tenant_id'. Please check your Commodore API access and cluster ID."; exit 1; } ; fi
     env -i "commodore_tenant_id=$tenant_id" >> "$OUTPUT"
 
     region=$(curl -sH "Authorization: Bearer $(commodore fetch-token)" ${COMMODORE_API_URL}/clusters/${INPUT_commodore_cluster_id} | jq -r .facts.region)
-    test -z "$region" && test "$region" != "null" && { echo "❌ Failed to retrieve cloudscale region for cluster ID '$INPUT_commodore_cluster_id'."; exit 1; } || { echo "✅ Retrieved cloudscale region '$region' for cluster ID '$INPUT_commodore_cluster_id'."; }
+    if test -z "$region" && test "$region" != "null" ; then { echo "❌ Failed to retrieve cloudscale region for cluster ID '$INPUT_commodore_cluster_id'."; exit 1; } ; else { echo "✅ Retrieved cloudscale region '$region' for cluster ID '$INPUT_commodore_cluster_id'."; } ; fi
     env -i "cloudscale_region=$region" >> "$OUTPUT"
 - match: And a Keycloak service
   description: |-
@@ -1018,8 +1018,9 @@ steps:
     echo '# Applying cert-manager ... #'
     kubectl apply -f catalog/manifests/cert-manager/00_namespace.yaml
     kubectl apply -Rf catalog/manifests/cert-manager/10_cert_manager
-    kubectl -n syn-cert-manager patch --type=merge \
-      "$(kubectl -n syn-cert-manager get deploy -oname)" \
+    # shellcheck disable=2046
+    # we need word splitting here
+      $(kubectl -n syn-cert-manager get deploy -oname) \
       -p '{"spec":{"template":{"spec":{"tolerations":[{"operator":"Exists"}]}}}}'
     echo '# Applied cert-manager. #'
     echo
@@ -1034,6 +1035,7 @@ steps:
     echo
     echo '# Applying machinesets ... #'
     # shellcheck disable=2046
+    # we need word splitting here
     kubectl apply $( for f in catalog/manifests/openshift4-nodes/machineset-*.yaml ; do echo -n "-f $f " ; done )
     # We do not want to quote the $() expression because we *want* it to be word-split.
     echo '# Applied machinesets. #'
@@ -1050,7 +1052,7 @@ steps:
     done
     echo "Waiting for load balancer to become available ..."
     kubectl -n appuio-cloudscale-loadbalancer-controller \
-      wait --for condition=available \
+      wait --for condition=available --timeout 3m \
       deploy cloudscale-loadbalancer-controller-controller-manager
     echo '# Applied loadbalancer controller. #'
     echo
@@ -1202,8 +1204,10 @@ steps:
     fi
 
     echo '# Removing temporary cert-manager tolerations ... #'
+    # shellcheck disable=2046
+    # we need word splitting here
     kubectl -n syn-cert-manager patch --type=json \
-      "$(kubectl -n syn-cert-manager get deploy -oname)" \
+      $(kubectl -n syn-cert-manager get deploy -oname) \
       -p '[{"op":"remove","path":"/spec/template/spec/tolerations"}]'
     echo '# Removed temporary cert-manager tolerations. #'
 

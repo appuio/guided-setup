@@ -1,8 +1,8 @@
 Given I have all prerequisites installed
 And a lieutenant cluster
-And Cloudscale API tokens
 And a personal VSHN GitLab access token
 And a control.vshn.net Servers API token
+And I have the cluster's Cloudscale tokens
 And I have emergency cluster access
 Then I confirm cluster deletion
 Then I disable the OpsGenie heartbeat

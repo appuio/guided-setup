@@ -26,6 +26,37 @@ steps:
     kubectl get nodes
 
     env -i "kubeconfig_path=$(pwd)/em-${INPUT_commodore_cluster_id}" >> "$OUTPUT"
+- match: And I have the cluster's Cloudscale tokens
+  description: |-
+    This step fetches the cluster's Cloudscale token and Floaty token from Vault.
+  inputs:
+  - name: vault_address
+    description: |-
+      Address of the Vault server associated with the Lieutenant API to store cluster secrets.
+
+      https://vault-prod.syn.vshn.net/ for production clusters.
+      https://vault-int.syn.vshn.net/ for test clusters.
+  - name: commodore_cluster_id
+  - name: commodore_tenant_id
+  outputs:
+  - name: cloudscale_token
+  - name: cloudscale_token_floaty
+  run: |
+    set -euo pipefail
+    export VAULT_ADDR=${INPUT_vault_address}
+    vault login -method=oidc
+
+    token=$(vault kv get -format=json \
+      "clusters/kv/${INPUT_commodore_tenant_id}/${INPUT_commodore_cluster_id}/cloudscale" | \
+      jq -r '.data.data["token"]')
+
+    floaty=$(vault kv get -format=json \
+      "clusters/kv/${INPUT_commodore_tenant_id}/${INPUT_commodore_cluster_id}/floaty" | \
+      jq -r '.data.data["iam_secret"]')
+
+    env -i "cloudscale_token=${token}" >> "$OUTPUT"
+    env -i "cloudscale_token_floaty=${floaty}" >> "$OUTPUT"
+
 - match: Then I confirm cluster deletion
   description: |-
     This step asks you to confirm with 4 eyes whether this cluster is really to be deleted.

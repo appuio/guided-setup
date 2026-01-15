@@ -35,7 +35,7 @@ steps:
     fi
 
     echo "# Waiting for ArgoCD resource to exist ..."
-    kubectl wait --for=create crds/argocds.argoproj.io --timeout=90s
+    kubectl wait --for=create crds/argocds.argoproj.io --timeout=5m
 
     echo "# Waiting for ArgoCD instance to exist ..."
     kubectl wait --for=create argocd/syn-argocd -nsyn --timeout=90s
@@ -59,12 +59,17 @@ steps:
     echo '# Waiting for cert-manager secret ...'
     kubectl wait --for=create secret/acme-dns-client -nsyn-cert-manager
 
-    fulldomain=$(kubectl -n syn-cert-manager \
-      get secret acme-dns-client \
-      -o jsonpath='{.data.acmedns\.json}' | \
-      base64 -d  | \
-      jq -r '[.[]][0].fulldomain')
-    echo "$fulldomain"
+    fulldomain=""
+
+    while [[ -z "$fulldomain" ]]
+    do
+      fulldomain=$(kubectl -n syn-cert-manager \
+        get secret acme-dns-client \
+        -o jsonpath='{.data.acmedns\.json}' | \
+        base64 -d  | \
+        jq -r '[.[]][0].fulldomain')
+      echo "$fulldomain"
+    done
 
     dnstmp=$(mktemp)
 
@@ -95,9 +100,12 @@ steps:
     yq -i e 'del(.clusters[0].cluster.certificate-authority-data)' "${INPUT_kubeconfig_path}"
 
     echo "Waiting for cluster certificate to be issued ..."
+    echo "If you need to debug things on the cluster, run:"
+    echo "export KUBECONFIG=${INPUT_kubeconfig_path}2"
+    echo
     until kubectl get nodes
     do
-      sleep 5
+      sleep 20
     done
 
 

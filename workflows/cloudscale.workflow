@@ -29,8 +29,8 @@ And I verify emergency access
 And I configure the cluster alerts
 And I enable Opsgenie alerting
 And I verify the image registry config
+And I schedule the first maintenance
 Then I configure apt-dater groups for the LoadBalancers
 And I remove the bootstrap bucket
-And I schedule the first maintenance
 And I add the cluster to openshift4-clusters
 And I wait for maintenance to complete

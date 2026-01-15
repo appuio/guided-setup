@@ -66,13 +66,11 @@ steps:
       echo "Cloudscale S3 user for cluster ID '${INPUT_commodore_cluster_id}' already exists. id: $(echo "$response" | jq -r .id)"
     fi
 
-    mc alias set \
+    echo -n "Waiting for S3 credentials to become available ..."
+    until mc alias set \
       "${INPUT_commodore_cluster_id}" "https://objects.${INPUT_cloudscale_region}.cloudscale.ch" \
       "$(echo "$response" | jq -r '.keys[0].access_key')" \
       "$(echo "$response" | jq -r '.keys[0].secret_key')"
-
-    echo -n "Waiting for S3 credentials to become available ..."
-    until mc ls > /dev/null 2>&1
     do
       echo -n .
       sleep 5
