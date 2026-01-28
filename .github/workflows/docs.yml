@@ -1,6 +1,9 @@
 name: Docs
 
 on:
+  pull_request:
+    branches:
+      - main
   push:
     branches:
       - main
@@ -32,6 +35,7 @@ jobs:
             gs/guided-setup render "$wf" gs/workflows/"$cloud"/*.yml | sed -e 's/^=/==/' > docs/docs/modules/ROOT/partials/guided-setup/"$stripext".adoc
           done
       - name: Commit and push changes (if any)
+        if: ${{ github.event_name == 'push' }}
         shell: bash
         env:
           CI_COMMIT_MESSAGE: Update install instructions from guided-setup
