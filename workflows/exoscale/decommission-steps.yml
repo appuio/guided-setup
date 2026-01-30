@@ -1,35 +1,4 @@
 steps:
-- match: And I have the cluster's Cloudscale tokens
-  description: |-
-    This step fetches the cluster's Cloudscale token and Floaty token from Vault.
-  inputs:
-  - name: vault_address
-    description: |-
-      Address of the Vault server associated with the Lieutenant API to store cluster secrets.
-
-      https://vault-prod.syn.vshn.net/ for production clusters.
-      https://vault-int.syn.vshn.net/ for test clusters.
-  - name: commodore_cluster_id
-  - name: commodore_tenant_id
-  outputs:
-  - name: cloudscale_token
-  - name: cloudscale_token_floaty
-  run: |
-    set -euo pipefail
-    export VAULT_ADDR=${INPUT_vault_address}
-    vault login -method=oidc
-
-    token=$(vault kv get -format=json \
-      "clusters/kv/${INPUT_commodore_tenant_id}/${INPUT_commodore_cluster_id}/cloudscale" | \
-      jq -r '.data.data["token"]')
-
-    floaty=$(vault kv get -format=json \
-      "clusters/kv/${INPUT_commodore_tenant_id}/${INPUT_commodore_cluster_id}/floaty" | \
-      jq -r '.data.data["iam_secret"]')
-
-    env -i "cloudscale_token=${token}" >> "$OUTPUT"
-    env -i "cloudscale_token_floaty=${floaty}" >> "$OUTPUT"
-
 - match: Then I save the loadbalancer metadata
   description: |-
     This step gathers metadata on the LoadBalancer instances (such as their icinga zone and backup server), such that they can be properly decommissioned down the line.
@@ -51,6 +20,8 @@ steps:
   - name: lb_icinga_2
   run: |
     set -euo pipefail
+    echo "TODO"
+    exit 1
 
     export COMMODORE_API_URL="${INPUT_commodore_api_url}"
 
@@ -133,6 +104,8 @@ steps:
   - name: commodore_api_url
   run: |
     set -euo pipefail
+    echo "TODO"
+    exit 1
 
     export COMMODORE_API_URL="${INPUT_commodore_api_url}"
 
@@ -190,6 +163,8 @@ steps:
   - name: commodore_cluster_id
   run: |
     set -euo pipefail
+    echo "TODO"
+    exit 1
     for server_group_uuid in $(curl -H"Authorization: Bearer ${INPUT_cloudscale_token}" \
       https://api.cloudscale.ch/v1/server-groups | \
       jq -r --arg cluster_id "${INPUT_commodore_cluster_id}" \
@@ -203,30 +178,20 @@ steps:
   description: |-
     This step deletes the cluster's associated S3 buckets from Cloudscale.
   inputs:
-  - name: cloudscale_token
-  - name: csp_region
+  - name: exoscale_key
+  - name: exoscale_secret
   - name: commodore_cluster_id
   run: |
     set -euo pipefail
-    # Use already exiting bucket user
-    response=$(curl -sH "Authorization: Bearer ${INPUT_cloudscale_token}" \
-      https://api.cloudscale.ch/v1/objects-users | \
-      jq -e ".[] | select(.display_name == \"${INPUT_commodore_cluster_id}\")")
+    export EXOSCALE_API_KEY="${INPUT_exoscale_key}"
+    export EXOSCALE_API_SECRET="${INPUT_exoscale_secret}"
 
-    # configure minio client to use the bucket
-    mc alias set \
-      "${INPUT_commodore_cluster_id}" "https://objects.${INPUT_csp_region}.cloudscale.ch" \
-      "$(echo "$response" | jq -r '.keys[0].access_key')" \
-      "$(echo "$response" | jq -r '.keys[0].secret_key')"
-
-    # delete bootstrap-ignition bucket (should already be deleted after setup)
-    mc rb "${INPUT_commodore_cluster_id}/${INPUT_commodore_cluster_id}-bootstrap-ignition" --force
-
-    # delete image-registry bucket
-    mc rb "${INPUT_commodore_cluster_id}/${INPUT_commodore_cluster_id}-image-registry" --force
-
-    # delete Loki logstore bucket
-    mc rb "${INPUT_commodore_cluster_id}/${INPUT_commodore_cluster_id}-logstore" --force
+    # Bootstrap bucket
+    exo storage rb -r -f "${INPUT_commodore_cluster_id}-bootstrap" || true
+    # OpenShift Image Registry bucket
+    exo storage rb -r -f "${INPUT_commodore_cluster_id}-image-registry" || true
+    # OpenShift Loki logstore
+    exo storage rb -r -f "${INPUT_commodore_cluster_id}-logstore" || true
 
 - match: And I delete the cluster backup
   description: |-
@@ -246,6 +211,8 @@ steps:
       you and a colleague should agree that the backup needs to be deleted.
   run: |
     set -euo pipefail
+    echo "TODO"
+    exit 1
 
     if [[ ${INPUT_backup_deletion_confirmation} != "YES" ]]
     then
@@ -328,31 +295,21 @@ steps:
 
 - match: And I delete the cluster's API tokens
   description: |-
-    This step deletes the cluster's associated Cloudscale API tokens from Cloudscale.
+    This step deletes the cluster's associated Exoscale API tokens from Exoscale.
   inputs:
-  - name: cloudscale_token
-  - name: cloudscale_token_floaty
+  - name: exoscale_key
+  - name: exoscale_secret
+  - name: commodore_cluster_id
   run: |
     set -euo pipefail
-    echo '##############################################################'
-    echo '#                                                            #'
-    echo '#   Please delete the Cloudscale token and Floaty token      #'
-    echo '#   associated with this cluster via the Cloudscale console. #'
-    echo '#                                                            #'
-    echo '##############################################################'
+    export EXOSCALE_API_KEY="${INPUT_exoscale_key}"
+    export EXOSCALE_API_SECRET="${INPUT_exoscale_secret}"
 
-    echo -n "Checking for deletion of main Cloudscale token ..."
-    while [[ $(curl -sH "Authorization: Bearer ${INPUT_cloudscale_token}" https://api.cloudscale.ch/v1/flavors -o /dev/null -w"%{http_code}") != 401 ]]
-    do
-      echo -n .
-      sleep 3
-    done
-    echo " Success."
+    # delete restricted api keys
+    exo iam api-key delete -f "${INPUT_commodore_cluster_id}_ccm-exoscale" || true
+    exo iam api-key delete -f "${INPUT_commodore_cluster_id}_csi-driver-exoscale" || true
+    exo iam api-key delete -f "${INPUT_commodore_cluster_id}_floaty" || true
+    exo iam api-key delete -f "${INPUT_commodore_cluster_id}_object_storage" || true
 
-    echo -n "Checking for deletion of Floaty Cloudscale token ..."
-    while [[ $(curl -sH "Authorization: Bearer ${INPUT_cloudscale_token_floaty}" https://api.cloudscale.ch/v1/flavors -o /dev/null -w"%{http_code}") != 401 ]]
-    do
-      echo -n .
-      sleep 3
-    done
-    echo " Success."
+    # delete decommissioning api key
+    exo iam api-key delete -f "${INPUT_commodore_cluster_id}" || true
