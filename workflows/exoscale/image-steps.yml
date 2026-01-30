@@ -1,0 +1,86 @@
+steps:
+- match: And I set up required S3 buckets
+  description: |-
+    This step sets up the required S3 buckets for the OpenShift cluster installation.
+  inputs:
+  - name: exoscale_key
+  - name: exoscale_secret
+  - name: commodore_cluster_id
+  - name: commodore_api_url
+  - name: csp_region
+  run: |
+    set -euo pipefail
+    export EXOSCALE_API_KEY="${INPUT_exoscale_key}"
+    export EXOSCALE_API_SECRET="${INPUT_exoscale_secret}"
+    export COMMODORE_API_URL="${INPUT_commodore_api_url}"
+
+    exo storage create "sos://${INPUT_commodore_cluster_id}-bootstrap" --zone "${INPUT_csp_region}"
+
+    distribution="$(curl -sH "Authorization: Bearer $(commodore fetch-token)" ${COMMODORE_API_URL}/clusters/${INPUT_commodore_cluster_id} | jq -r .facts.distribution)"
+    if [[ "$distribution" != "oke" ]]
+    then
+      exo storage create "sos://${INPUT_commodore_cluster_id}-logstore" --zone "${INPUT_csp_region}"
+    fi
+
+- match: And I import the image in Exoscale
+  description: |-
+    This step modifies and uploads the Red Hat CoreOS image to the S3 bucket for the image registry.
+
+    It then imports the image into Exoscale as a custom image.
+  inputs:
+  - name: image_path
+  - name: commodore_cluster_id
+  - name: csp_region
+  - name: image_major
+  - name: image_minor
+  - name: image_patch
+  - name: exoscale_key
+  - name: exoscale_secret
+  - name: exoscale_s3_endpoint
+  outputs:
+  - name: rhcos_template
+  run: |
+    set -euo pipefail
+
+    exo_path="${INPUT_image_path%%.qcow2}"
+
+    export EXOSCALE_API_KEY="${INPUT_exoscale_key}"
+    export EXOSCALE_API_SECRET="${INPUT_exoscale_secret}"
+
+    RHCOS_VERSION="${INPUT_image_major}.${INPUT_image_minor}.${INPUT_image_patch}"
+
+    slug="$( exo compute instance-template list -v private -z "${INPUT_csp_region}" -Ojson | jq -r '.[] | select(.name | startswith("rhcos-'${INPUT_image_major}.${INPUT_image_minor}'")) | .name' )"
+
+    if [ -n "$slug" ] && [ "$slug" != "null" ]; then
+      echo "Image '$slug' already exists in Exoscale, skipping upload."
+      env -i "rhcos_template=$slug" >> "$OUTPUT"
+      exit 0
+    fi
+
+    # TODO: The virt-edit approach will NOT work with guided-setup. We need an alternative.
+    # exit 1
+    # sudo virt-edit -a "${INPUT_image_path}" \
+    #   -m /dev/sda3:/ /loader/entries/ostree-1.conf \
+    #   -e 's/openstack/exoscale/'
+    
+
+    exo storage upload "${INPUT_image_path}" "sos://${INPUT_commodore_cluster_id}-bootstrap" --acl public-read
+
+    sleep 3
+
+    exo compute instance-template register "rhcos-${RHCOS_VERSION}" \
+      "https://${INPUT_exoscale_s3_endpoint}/${INPUT_commodore_cluster_id}-bootstrap/rhcos-${RHCOS_VERSION}.qcow2" \
+      "$(md5sum ${INPUT_image_path} | awk '{ print $1 }')" \
+      --zone "${INPUT_csp_region}" \
+      --boot-mode uefi \
+      --disable-password \
+      --username core \
+      --description "Red Hat Enterprise Linux CoreOS (RHCOS) ${RHCOS_VERSION}"
+
+    exo storage delete -f "sos://${CLUSTER_ID}-bootstrap/rhcos-${RHCOS_VERSION}.qcow2"
+
+    export RHCOS_TEMPLATE="rhcos-${RHCOS_VERSION}"
+
+    env -i "rhcos_template=$RHCOS_TEMPLATE" >> "$OUTPUT"
+
+    echo "Image import initiated. ⚠️ TODO: Poll for completion."

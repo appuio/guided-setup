@@ -30,38 +30,196 @@ steps:
 
     if which aws >/dev/null 2>&1 ; then { echo "✅ aws (AWS CLI) is installed."; } ; else { echo "❌ aws (AWS CLI) is not installed. Please install aws to proceed. Our recommended installer is uv: 'uv tool install awscli'"; exit 1; } ; fi
 
+    if which exo >/dev/null 2>&1 ; then { echo "✅ exo (Exoscale CLI) is installed."; } ; else { echo "❌ exo (Exoscale CLI) is not installed. Please install exo to proceed. See: https://community.exoscale.com/tools/command-line-interface/"; exit 1; } ; fi
+
     if which restic >/dev/null 2>&1 ; then { echo "✅ restic (Backup CLI) is installed."; } ; else { echo "❌ restic (Backup CLI) is not installed. Please install restic to proceed."; exit 1; } ; fi
+
+    if which gzip >/dev/null 2>&1 ; then { echo "✅ gzip (file compression) is installed."; } ; else { echo "❌ gzip (file compression) is not installed. Please install gzip to proceed."; exit 1; } ; fi
+
+    if which md5sum >/dev/null 2>&1 ; then { echo "✅ md5sum (file checksums) is installed."; } ; else { echo "❌ md5sum (file checksums) is not installed. Please install md5sum to proceed."; exit 1; } ; fi
+
+    if which virt-edit >/dev/null 2>&1 ; then { echo "✅ virt-edit (VM image editing) is installed."; } ; else { echo "❌ virt-edit (VM image editing) is not installed. Please install virt-edit to proceed."; exit 1; } ; fi
+
+    if which cpio >/dev/null 2>&1 ; then { echo "✅ cpio (file archiving) is installed."; } ; else { echo "❌ cpio (file archiving) is not installed. Please install cpio to proceed."; exit 1; } ; fi
 
     if which emergency-credentials-receive >/dev/null 2>&1 ; then { echo "✅ emergency-credentials-receive (Cluster emergency access helper) is installed."; } ; else { echo "❌ emergency-credentials-receive is not installed. Please install it from https://github.com/vshn/emergency-credentials-receive ."; exit 1; } ; fi
 
     echo "✅ All prerequisites are met."
-- match: And Cloudscale API tokens
+- match: And Exoscale API tokens
   inputs:
-  - name: cloudscale_token
+  - name: exoscale_key
     description: |-
-      Cloudscale API token with read+write permissions.
+      Exoscale API Key name
 
-      Used for setting up the cluster and for the machine api provider.
-  - name: cloudscale_token_floaty
+      Used for setting up or tearing down the cluster with terraform
+  - name: exoscale_secret
     description: |-
-      Cloudscale API token with read+write permissions.
+      Exoscale API secret
 
-      Used for managing the floating IPs.
+      Used for setting up or tearing down the cluster with terraform
+  - name: csp_region
+    description: |-
+      Name of the exoscale zone in which to set up the cluster.
+
+      All lowercase. For example: ch-dk-2
+  outputs:
+  - name: exoscale_s3_endpoint
   description: |-
-    Create 2 new cloudscale API tokens with read+write permissions and name them
-    <cluster_id> and <cluster_id>_floaty on control.cloudscale.ch/service/<your-project>/api-token.
+    Create a new Exoscale API key in the correct project, with IAMv3 role "Owner".
 
-    This step currently does not validate whether the tokens have read permission.
+    This step currently does not validate the token's access scope.
   run: |
     set -euo pipefail
-    if [[ $( curl -sH "Authorization: Bearer ${INPUT_cloudscale_token}" https://api.cloudscale.ch/v1/flavors -o /dev/null -w"%{http_code}" ) != 200 ]]
+    export EXOSCALE_API_KEY="${INPUT_exoscale_key}"
+    export EXOSCALE_API_SECRET="${INPUT_exoscale_secret}"
+    exo limits > /dev/null || { echo "Invalid token!" ; exit 1 ; }
+    echo "Token is valid"
+    env -i "exoscale_s3_endpoint=sos-${INPUT_csp_region}.exo.io" >> "$OUTPUT"
+- match: Then I check the Exoscale resource quotas
+  inputs:
+  - name: exoscale_key
+  - name: exoscale_secret
+  description: |-
+    Checks the quotas in your Exoscale org for DNS and instances.
+
+    If the quotas are too low, you must manually increase them.
+  run: |
+    set -euo pipefail
+    export EXOSCALE_API_KEY="${INPUT_exoscale_key}"
+    export EXOSCALE_API_SECRET="${INPUT_exoscale_secret}"
+
+    instances_used="$( exo limits -Ojson | jq '.[] | select(.resource == "Compute instances").used'  )"
+    instances_max="$( exo limits -Ojson | jq '.[] | select(.resource == "Compute instances").max'  )"
+
+    if (( instances_max - instances_used < 15 ))
     then
-      echo "Cloudscale token not valid!"
+      echo "Instance quota is insufficient! Please increase the instance quota."
+      echo "Visit https://portal.exoscale.com/u/$( exo x get-organization | jq -r .id )/organization/quotas "
+      exit 1
     fi
-    if [[ $( curl -sH "Authorization: Bearer ${INPUT_cloudscale_token_floaty}" https://api.cloudscale.ch/v1/flavors -o /dev/null -w"%{http_code}" ) != 200 ]]
-    then
-      echo "Cloudscale Floaty token not valid!"
+    echo "Instance quota is sufficient"
+
+    echo '###################################################################################'
+    echo '#                                                                                 #'
+    echo '#  Please check the DNS subscription and upgrade it if no DNS Domains are left.   #'
+    echo '#                                                                                 #'
+    echo '###################################################################################'
+    echo
+    echo "See https://portal.exoscale.com/u/$( exo x get-organization | jq -r .id )/dns"
+
+- match: Then I create the necessary Exoscale IAM keys
+  description: |-
+    This step creates restricted API keys for object storage, CSI driver, and CCM.
+  inputs:
+  - name: exoscale_key
+  - name: exoscale_secret
+  - name: commodore_cluster_id
+  outputs:
+  - name: s3_key
+  - name: s3_secret
+  - name: csi_key
+  - name: csi_secret
+  - name: ccm_key
+  - name: ccm_secret
+  run: |
+    set -euo pipefail
+    export EXOSCALE_API_KEY="${INPUT_exoscale_key}"
+    export EXOSCALE_API_SECRET="${INPUT_exoscale_secret}"
+
+    echo "Create SOS IAM role, if it doesn't exist yet in the organization"
+    sos_iam_role_id=$(exo iam role list -O json | \
+      jq -r '.[] | select(.name=="sos-full-access") | .key')
+    if [ -z "${sos_iam_role_id}" ]; then
+    echo '{
+      "default-service-strategy": "deny",
+      "services": {
+        "sos": {"type": "allow"}
+      }
+    }' | \
+    exo iam role create sos-full-access \
+      --description "Full access to object storage service" \
+      --policy -
     fi
+    echo "TODO: Check whether the key with that name already exists"
+    # Create access key
+    exoscale_s3_credentials=$(exo iam api-key create -O json \
+      "${INPUT_commodore_cluster_id}_object_storage" sos-full-access)
+    EXOSCALE_S3_ACCESSKEY=$(echo "${exoscale_s3_credentials}" | jq -r '.key')
+    EXOSCALE_S3_SECRETKEY=$(echo "${exoscale_s3_credentials}" | jq -r '.secret')
+
+    echo
+    echo "Create Exoscale CSI driver Exoscale IAM role, if it doesn't exist yet in the organization"
+    csidriver_role_id=$(exo iam role list -O json | \
+      jq -r '.[] | select(.name=="csi-driver-exoscale") | .key')
+    if [ -z "${csidriver_role_id}" ]; then
+    cat << EOF | exo iam role create csi-driver-exoscale \
+      --description "Exoscale CSI Driver: Access to storage operations and zone list" \
+      --policy -
+    {
+      "default-service-strategy": "deny",
+      "services": {
+        "compute": {
+          "type": "rules",
+          "rules": [
+            {
+              "expression": "operation in ['list-zones', 'get-block-storage-volume', 'list-block-storage-volumes', 'create-block-storage-volume', 'delete-block-storage-volume', 'attach-block-storage-volume-to-instance', 'detach-block-storage-volume', 'update-block-storage-volume-labels', 'resize-block-storage-volume', 'get-block-storage-snapshot', 'list-block-storage-snapshots', 'create-block-storage-snapshot', 'delete-block-storage-snapshot']",
+              "action": "allow"
+            }
+          ]
+        }
+      }
+    }
+    EOF
+    fi
+    echo "TODO: Check whether the key with that name already exists"
+    # Create access key
+    csi_credentials=$(exo iam api-key create -O json \
+      "${INPUT_commodore_cluster_id}_csi-driver-exoscale" csi-driver-exoscale)
+    CSI_ACCESSKEY=$(echo "${csi_credentials}" | jq -r '.key')
+    CSI_SECRETKEY=$(echo "${csi_credentials}" | jq -r '.secret')
+
+    echo
+    echo "Create Exoscale CCM Exoscale IAM role, if it doesn't exist yet in the organization"
+    ccm_role_id=$(exo iam role list -O json | \
+      jq -r '.[] | select(.name=="ccm-exoscale") | .key')
+    if [ -z "${ccm_role_id}" ]; then
+    cat <<EOF | exo iam role create ccm-exoscale \
+      --description "Exoscale CCM: Allow managing NLBs and reading instances/instance pools" \
+      --policy -
+    {
+      "default-service-strategy": "deny",
+      "services": {
+        "compute": {
+          "type": "rules",
+          "rules": [
+            {
+              "expression": "operation in ['add-service-to-load-balancer', 'create-load-balancer', 'delete-load-balancer', 'delete-load-balancer-service', 'get-load-balancer', 'get-load-balancer-service', 'get-operation', 'list-load-balancers', 'reset-load-balancer-field', 'reset-load-balancer-service-field', 'update-load-balancer', 'update-load-balancer-service']",
+              "action": "allow"
+            },
+            {
+              "expression": "operation in ['get-instance', 'get-instance-pool', 'get-instance-type', 'list-instances', 'list-instance-pools', 'list-zones']",
+              "action": "allow"
+            }
+          ]
+        }
+      }
+    }
+    EOF
+    fi
+    echo "TODO: Check whether the key with that name already exists"
+    # Create access key
+    ccm_credentials=$(exo iam api-key create -O json \
+      "${INPUT_commodore_cluster_id}_ccm-exoscale" ccm-exoscale)
+    CCM_ACCESSKEY=$(echo "${ccm_credentials}" | jq -r '.key')
+    CCM_SECRETKEY=$(echo "${ccm_credentials}" | jq -r '.secret')
+
+    env -i "s3_key=${EXOSCALE_S3_ACCESSKEY}" >> "$OUTPUT"
+    env -i "s3_secret=${EXOSCALE_S3_SECRETKEY}" >> "$OUTPUT"
+    env -i "csi_key=${CSI_ACCESSKEY}" >> "$OUTPUT"
+    env -i "csi_secret=${CSI_SECRETKEY}" >> "$OUTPUT"
+    env -i "ccm_key=${CCM_ACCESSKEY}" >> "$OUTPUT"
+    env -i "ccm_secret=${CCM_SECRETKEY}" >> "$OUTPUT"
+
 - match: Then I set secrets in Vault
   description: |-
     This step stores the collected secrets and tokens in the ProjectSyn Vault.
@@ -73,9 +231,13 @@ steps:
       https://vault-prod.syn.vshn.net/ for production clusters.
   - name: commodore_cluster_id
   - name: commodore_tenant_id
-  - name: bucket_user
-  - name: cloudscale_token
-  - name: cloudscale_token_floaty
+  - name: s3_key
+  - name: s3_secret
+  - name: csi_key
+  - name: csi_secret
+  - name: ccm_key
+  - name: ccm_secret
+
   outputs:
   - name: hieradata_repo_user
   - name: hieradata_repo_token
@@ -85,15 +247,10 @@ steps:
     export VAULT_ADDR=${INPUT_vault_address}
     vault login -method=oidc
 
-    # Set the cloudscale.ch access secrets
-    vault kv put clusters/kv/${INPUT_commodore_tenant_id}/${INPUT_commodore_cluster_id}/cloudscale \
-      token=${INPUT_cloudscale_token} \
-      s3_access_key="$(echo "${INPUT_bucket_user}" | jq -r '.keys[0].access_key')" \
-      s3_secret_key="$(echo "${INPUT_bucket_user}" | jq -r '.keys[0].secret_key')"
-
-    # Put LB API key in Vault
-    vault kv put clusters/kv/${INPUT_commodore_tenant_id}/${INPUT_commodore_cluster_id}/floaty \
-      iam_secret="${INPUT_cloudscale_token_floaty}"
+    # Set the Exoscale object storage API key
+    vault kv put clusters/kv/${INPUT_commodore_tenant_id}/${INPUT_commodore_cluster_id}/exoscale/storage_iam \
+      s3_access_key=${INPUT_s3_key} \
+      s3_secret_key=${INPUT_s3_secret}
 
     # Generate an HTTP secret for the registry
     vault kv put clusters/kv/${INPUT_commodore_tenant_id}/${INPUT_commodore_cluster_id}/registry \
@@ -106,6 +263,17 @@ steps:
     # Generate a password for the cluster object backups
     vault kv put clusters/kv/${INPUT_commodore_tenant_id}/${INPUT_commodore_cluster_id}/cluster-backup \
       password="$(LC_ALL=C tr -cd "A-Za-z0-9" </dev/urandom | head -c 32)"
+
+    # Set the CSI Driver Exoscale Credentials
+    vault kv put clusters/kv/${INPUT_commodore_tenant_id}/${INPUT_commodore_cluster_id}/exoscale/csi_driver \
+      access_key=${INPUT_csi_key} \
+      secret_key=${INPUT_csi_secret}
+
+    # Set the CCM Exoscale Credentials
+    vault kv put clusters/kv/${INPUT_commodore_tenant_id}/${INPUT_commodore_cluster_id}/exoscale/ccm \
+      access_key=${INPUT_ccm_key} \
+      secret_key=${INPUT_ccm_secret}
+
 
     hieradata_repo_secret=$(vault kv get \
       -format=json "clusters/kv/lbaas/hieradata_repo_token" | jq '.data.data')
@@ -120,9 +288,7 @@ steps:
   - name: commodore_api_url
   - name: commodore_cluster_id
   - name: commodore_tenant_id
-  - name: hieradata_repo_user
   - name: cluster_domain
-  - name: hieradata_repo_token
   - name: image_major
   - name: image_minor
   run: |
@@ -146,26 +312,13 @@ steps:
       git diff --exit-code --quiet || git commit -a -m "Include openshift4 class for ${INPUT_commodore_cluster_id}"
     fi
 
-    yq eval -i '.parameters.openshift.cloudscale.subnet_uuid = "TO_BE_DEFINED"' ${INPUT_commodore_cluster_id}.yml
-
-    yq eval -i '.parameters.openshift.cloudscale.rhcos_image_slug = "rhcos-4.19"' \
-      ${INPUT_commodore_cluster_id}.yml
-
-    yq eval -i ".parameters.openshift4_terraform.terraform_variables.ignition_ca = \"TO_BE_DEFINED\"" \
-      ${INPUT_commodore_cluster_id}.yml
-
-    git diff --exit-code --quiet || git commit -a -m "Configure Cloudscale metaparameters on ${INPUT_commodore_cluster_id}"
-
-    yq eval -i '.applications += ["cloudscale-loadbalancer-controller"]' ${INPUT_commodore_cluster_id}.yml
+    yq eval -i '.applications += ["exoscale-cloud-controller-manager"]' ${INPUT_commodore_cluster_id}.yml
     yq eval -i '.applications = (.applications | unique)' ${INPUT_commodore_cluster_id}.yml
-    cat ${INPUT_commodore_cluster_id}.yml
+    git diff --exit-code --quiet || git commit -a -m "Deploy Exoscale cloud-controller-manager on ${INPUT_commodore_cluster_id}"
 
-    git diff --exit-code --quiet || git commit -a -m "Enable cloudscale loadbalancer controller for ${INPUT_commodore_cluster_id}"
 
     yq eval -i '.applications += ["cilium"]' ${INPUT_commodore_cluster_id}.yml
     yq eval -i '.applications = (.applications | unique)' ${INPUT_commodore_cluster_id}.yml
-
-    yq eval -i '.parameters.networkpolicy.networkPlugin = "cilium"' ${INPUT_commodore_cluster_id}.yml
 
     yq eval -i '.parameters.openshift.infraID = "TO_BE_DEFINED"' ${INPUT_commodore_cluster_id}.yml
     yq eval -i '.parameters.openshift.clusterID = "TO_BE_DEFINED"' ${INPUT_commodore_cluster_id}.yml
@@ -186,23 +339,26 @@ steps:
 
 - match: Then I configure the OpenShift installer
   description: |-
-    This step configures the OpenShift installer for the Cloudscale cluster by generating
+    This step configures the OpenShift installer for the Exoscale cluster by generating
     the necessary installation files using Commodore.
   inputs:
+  - name: exoscale_key
+  - name: exoscale_secret
   - name: commodore_cluster_id
   - name: commodore_tenant_id
   - name: base_domain
   - name: cluster_domain
   - name: vault_address
   - name: redhat_pull_secret
-  - name: csp_region
-  - name: bucket_user
-  - name: cloudscale_token
+  - name: ccm_key
+  - name: ccm_secret
   outputs:
   - name: ignition_bootstrap
   - name: ssh_public_key_path
   run: |
     set -euo pipefail
+    export EXOSCALE_API_KEY="${INPUT_exoscale_key}"
+    export EXOSCALE_API_SECRET="${INPUT_exoscale_secret}"
 
     export VAULT_ADDR="${INPUT_vault_address}"
     vault login -method=oidc
@@ -212,10 +368,10 @@ steps:
 
     env -i "ssh_public_key_path=$ssh_public_key" >> "$OUTPUT"
 
-    if vault kv get -format=json clusters/kv/${INPUT_commodore_tenant_id}/${INPUT_commodore_cluster_id}/cloudscale/ssh >/dev/null 2>&1; then
+    if vault kv get -format=json clusters/kv/${INPUT_commodore_tenant_id}/${INPUT_commodore_cluster_id}/exoscale/ssh >/dev/null 2>&1; then
       echo "SSH keypair for cluster ${INPUT_commodore_cluster_id} already exists in Vault, skipping generation."
 
-      vault kv get -format=json clusters/kv/${INPUT_commodore_tenant_id}/${INPUT_commodore_cluster_id}/cloudscale/ssh | \
+      vault kv get -format=json clusters/kv/${INPUT_commodore_tenant_id}/${INPUT_commodore_cluster_id}/exoscale/ssh | \
         jq -r '.data.data.private_key|@base64d' > "${ssh_private_key}"
 
       chmod 600 "${ssh_private_key}"
@@ -231,7 +387,7 @@ steps:
         base64_no_wrap='base64 --wrap 0'
       fi
 
-      vault kv put clusters/kv/${INPUT_commodore_tenant_id}/${INPUT_commodore_cluster_id}/cloudscale/ssh \
+      vault kv put clusters/kv/${INPUT_commodore_tenant_id}/${INPUT_commodore_cluster_id}/exoscale/ssh \
         private_key="$(cat "$ssh_private_key" | eval "$base64_no_wrap")"
     fi
 
@@ -247,13 +403,13 @@ steps:
     cat > "${installer_dir}/install-config.yaml" <<EOF
     apiVersion: v1
     metadata:
-      name: ${INPUT_commodore_cluster_id}
-    baseDomain: ${INPUT_base_domain}
+      name: ${INPUT_commodore_cluster_id} 
+    baseDomain: ${INPUT_base_domain} 
     platform:
       external:
-        platformName: cloudscale
+        platformName: exoscale
         cloudControllerManager: External
-    networking:
+    networking: 
       networkType: Cilium
     pullSecret: |
       ${INPUT_redhat_pull_secret}
@@ -271,12 +427,13 @@ steps:
         $machineconfigs
     fi
 
-    echo Copying Cloudscale CCM manifests...
-    for f in catalog/manifests/cloudscale-cloud-controller-manager/*; do
-      cp "$f" "${installer_dir}/manifests/cloudscale_ccm_$(basename "$f")"
+    echo Copying Exoscale CCM manifests...
+    for f in catalog/manifests/exoscale-cloud-controller-manager/manager/*; do
+      cp "$f" "${installer_dir}/manifests/exoscale_ccm_$(basename "$f")"
     done
-    yq -i e ".stringData.access-token=\"${INPUT_cloudscale_token}\"" \
-      "${installer_dir}/manifests/cloudscale_ccm_01_secret.yaml"
+    
+    yq -i e ".stringData.api-key=\"${INPUT_ccm_key}\",.stringData.api-secret=\"${INPUT_ccm_secret}\"" \
+      "${installer_dir}/manifests/exoscale_ccm_01_secret.yaml"
 
     echo Copying Cilium OLM manifests...
     for f in catalog/manifests/cilium/olm/[a-z]*; do
@@ -317,18 +474,7 @@ steps:
     openshift-install --dir "${installer_dir}" \
       create ignition-configs
 
-    mc alias set \
-      "${INPUT_commodore_cluster_id}" "https://objects.${INPUT_csp_region}.cloudscale.ch" \
-      "$(echo "$INPUT_bucket_user" | jq -r '.keys[0].access_key')" \
-      "$(echo "$INPUT_bucket_user" | jq -r '.keys[0].secret_key')"
-
-    mc cp "${installer_dir}/bootstrap.ign" "${INPUT_commodore_cluster_id}/${INPUT_commodore_cluster_id}-bootstrap-ignition/"
-
-    ignition_bootstrap=$(mc share download \
-      --json --expire=4h \
-      "${INPUT_commodore_cluster_id}/${INPUT_commodore_cluster_id}-bootstrap-ignition/bootstrap.ign" | jq -r '.share')
-
-    env -i "ignition_bootstrap=$ignition_bootstrap" >> "$OUTPUT"
+    exo storage upload "${installer_dir}/bootstrap.ign" "sos://${INPUT_commodore_cluster_id}-bootstrap" --acl public-read
 
     echo "✅ OpenShift installer configured successfully."
 
@@ -351,6 +497,8 @@ steps:
   - name: lb_fqdn_2
   run: |
     set -euo pipefail
+    echo "TODO"
+    exit 1
 
     export COMMODORE_API_URL="${INPUT_commodore_api_url}"
 
@@ -470,7 +618,7 @@ steps:
 
 - match: And I provision the bootstrap node
   description: |-
-    This step provisions the bootstrap node for the Cloudscale OpenShift cluster using Terraform.
+    This step provisions the bootstrap node for the Exoscale OpenShift cluster using Terraform.
   inputs:
   - name: cloudscale_token
   - name: cloudscale_token_floaty
@@ -487,6 +635,8 @@ steps:
   - name: kubeconfig_path
   run: |
     set -euo pipefail
+    echo "TODO"
+    exit 1
 
     export COMMODORE_API_URL="${INPUT_commodore_api_url}"
     installer_dir="$(pwd)/target"
@@ -588,6 +738,8 @@ steps:
   - name: image_minor
   run: |
     set -euo pipefail
+    echo "TODO"
+    exit 1
     export COMMODORE_API_URL="${INPUT_commodore_api_url}"
 
     cat <<EOF > ./terraform.env
@@ -671,6 +823,8 @@ steps:
   - name: cluster_domain
   run: |
     set -euo pipefail
+    echo "TODO"
+    exit 1
 
     export COMMODORE_API_URL="${INPUT_commodore_api_url}"
 
@@ -762,6 +916,8 @@ steps:
   - name: kubeconfig_path
   run: |
     set -euo pipefail
+    echo "TODO"
+    exit 1
     export COMMODORE_API_URL="${INPUT_commodore_api_url}"
     export KUBECONFIG="${INPUT_kubeconfig_path}"
 
@@ -831,6 +987,8 @@ steps:
   - name: lb_fqdn_2
   run: |
     set -euo pipefail
+    echo "TODO"
+    exit 1
 
     export COMMODORE_API_URL="${INPUT_commodore_api_url}"
 
@@ -909,6 +1067,8 @@ steps:
   - name: kubeconfig_path
   run: |
     set -euo pipefail
+    echo "TODO"
+    exit 1
     export COMMODORE_API_URL="${INPUT_commodore_api_url}"
     export KUBECONFIG="${INPUT_kubeconfig_path}"
 

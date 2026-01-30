@@ -32,7 +32,7 @@ jobs:
             basename=${wf##*/}
             stripext=${basename%%.*}
             cloud=${stripext%%-*}
-            gs/guided-setup render "$wf" gs/workflows/"$cloud"/*.yml | sed -e 's/^=/==/' > docs/docs/modules/ROOT/partials/guided-setup/"$stripext".adoc
+            gs/guided-setup render "$wf" gs/workflows/"$cloud"/*.yml gs/workflows/shared/*.yml | sed -e 's/^=/==/' > docs/docs/modules/ROOT/partials/guided-setup/"$stripext".adoc
           done
       - name: Commit and push changes (if any)
         if: ${{ github.event_name == 'push' }}
