@@ -1,0 +1,433 @@
+steps:
+- match: And I have emergency cluster access
+  description: |-
+    This step ensures the emergency credentials for the cluster have been retrieved
+  inputs:
+  - name: cluster_domain
+    description: |-
+      Domain of the cluster - the part after `api` or `apps`, respectively.
+
+      Usually of the form `<CLUSTER_ID>.<BASE_DOMAIN>`
+  - name: passbolt_passphrase
+    description: |-
+      Your password for Passbolt.
+
+      This is required to access the encrypted emergency credentials.
+  - name: commodore_cluster_id
+  outputs:
+  - name: kubeconfig_path
+  run: |
+    set -euo pipefail
+    export EMR_KUBERNETES_ENDPOINT=https://api.${INPUT_cluster_domain}:6443
+    export EMR_PASSPHRASE="${INPUT_passbolt_passphrase}"
+    emergency-credentials-receive "${INPUT_commodore_cluster_id}"
+
+    export KUBECONFIG="em-${INPUT_commodore_cluster_id}"
+    kubectl get nodes
+
+    env -i "kubeconfig_path=$(pwd)/em-${INPUT_commodore_cluster_id}" >> "$OUTPUT"
+- match: Then I confirm cluster deletion
+  description: |-
+    This step asks you to confirm with 4 eyes whether this cluster is really to be deleted.
+  inputs:
+  - name: commodore_cluster_id
+  - name: 4_eye_confirmation
+    description: |-
+      Please confirm the commodore cluster ID of the cluster you wish to delete.
+
+      Confirm this cluster ID according to the 4-eye principle. You and one colleague should agree on the cluster that is to be deleted.
+  run: |
+    set -euo pipefail
+    if [[ "${INPUT_commodore_cluster_id}" != "${INPUT_4_eye_confirmation}" ]]
+    then
+      echo "Cluster domain and confirmation do not match."
+      exit 1
+    fi
+- match: Then I disable the OpsGenie heartbeat
+  description: |-
+    This step disables the OpsGenie heartbeat, so we avoid producing alerts
+    during decommissioning.
+  inputs:
+  - name: vault_address
+  - name: commodore_cluster_id
+  run: |
+    set -euo pipefail
+    export VAULT_ADDR=${INPUT_vault_address}
+    vault login -method=oidc
+    OPSGENIE_KEY=$(vault kv get -format=json \
+      clusters/kv/__shared__/__shared__/opsgenie/aldebaran | \
+      jq -r '.data.data["heartbeat-password"]')
+    curl "https://api.opsgenie.com/v2/heartbeats/${INPUT_commodore_cluster_id}" \
+      -H"Authorization: GenieKey ${OPSGENIE_KEY}" \
+      -H"Content-Type: application/json" \
+      -XPATCH --data '{"enabled":false}'
+- match: And I disable Project Syn
+  description: |-
+    This step disables Project Syn (ArgoCD), so that ArgoCD does not re-create
+    resources we are trying to decommission.
+  inputs:
+  - name: kubeconfig_path
+  run: |
+    set -euo pipefail
+    export KUBECONFIG="${INPUT_kubeconfig_path}"
+    kubectl -n syn patch apps --type=json \
+        -p '[{"op":"replace", "path":"/spec/syncPolicy", "value": {}}]' \
+        root argocd
+    kubectl -n syn-argocd-operator scale deployment \
+        syn-argocd-operator-controller-manager --replicas 0
+    kubectl wait --for=delete pod -lcontrol-plane=argocd-operator --timeout=60s -nsyn-argocd-operator
+    kubectl -n syn scale sts syn-argocd-application-controller --replicas 0
+    kubectl wait --for=delete pod -lapp.kubernetes.io/name=syn-argocd-application-controller --timeout=60s -nsyn
+- match: And I delete all Load Balancer services and Load Balancers
+  description: |-
+    This step deletes all services of type LoadBalancer from the cluster.
+    It then deletes all LoadBalancer instances as well, so that the
+    corresponding Cloudscale resources can be decommissioned by the controller.
+  inputs:
+  - name: kubeconfig_path
+  run: |
+    set -euo pipefail
+    export KUBECONFIG="${INPUT_kubeconfig_path}"
+    echo '#  Deleting Services ...  #'
+    kubectl delete svc --field-selector spec.type=LoadBalancer -A
+    echo '#  Deleted Services.  #'
+    echo '#  Deleting LoadBalancers ...  #'
+    kubectl delete loadbalancers -A --all
+    echo '#  Deleted LoadBalancers.  #'
+- match: And I disable machine autoscaling
+  description: |-
+    This step disables autoscaling of machinesets.
+  inputs:
+  - name: kubeconfig_path
+  run: |
+    set -euo pipefail
+    export KUBECONFIG="${INPUT_kubeconfig_path}"
+    kubectl delete machineautoscaler -A --all
+- match: And I delete all persistent volumes
+  description: |-
+    This step deletes all persistent volumes on the cluster, so that the corresponding Cloudscale resources can be decommissioned by the controller.
+
+    By cordoning all non-master nodes and deleting all their pods (except the csi driver pods) we ensure that no new PVs are created, while the existing ones can be cleaned up. Deleting all pods has the additional benefit that we don’t have to deal with PDBs when deleting the machinesets in the next step.
+  inputs:
+  - name: kubeconfig_path
+  run: |
+    set -euo pipefail
+    export KUBECONFIG="${INPUT_kubeconfig_path}"
+    kubectl cordon -l node-role.kubernetes.io/worker
+    kubectl get po -A -oyaml | yq '.items = [.items[] |
+        select(.spec.nodeName | test("master-") | not) |
+        select(.metadata.namespace != "syn-csi-cloudscale")]' |\
+        kubectl delete --wait=false -f-
+    kubectl delete pvc -A --all --wait=false
+    kubectl wait --for=delete pv --all --timeout=120s
+
+    echo '########################################################'
+    echo '#                                                      #'
+    echo '#  Please verify that all PVs were deleted properly.   #'
+    echo '#                                                      #'
+    echo '########################################################'
+    echo
+    echo If the cluster still has PVs, please manually run the following:
+    echo "  "kubectl delete pv --all
+    sleep 2
+- match: And I delete all machinesets
+  description: |-
+    This step deletes all machinesets from the cluster, allowing all associated nodes to be decommissioned by the controller.
+  inputs:
+  - name: kubeconfig_path
+  run: |
+    set -euo pipefail
+    export KUBECONFIG="${INPUT_kubeconfig_path}"
+    kubectl -n openshift-machine-api delete machinesets --all
+    echo '#  Waiting for machines to be deleted ...'
+    kubectl -n openshift-machine-api wait --for=delete \
+        machinesets,machines --all --timeout=120s
+    kubectl get nodes
+
+- match: And I downtime the loadbalancers in icinga
+  description: |-
+    In this step you have to configure downtimes in Icinga for the cluster's load balancers.
+  inputs:
+  - name: lb_fqdn_1
+  - name: lb_fqdn_2
+  run: |
+    set -euo pipefail
+    echo '##############################################################'
+    echo '#                                                            #'
+    echo '#  Please configure downtimes for both hosts in Icinga UI.   #'
+    echo "#  Don't forget to also enable downtime for 'All Services'.  #"
+    echo '#                                                            #'
+    echo '##############################################################'
+    echo
+    echo The direct links are:
+    echo https://monitoring.vshn.net/icingadb/hosts?sort=host.state.severity%20desc#!/icingadb/host?name=${INPUT_lb_fqdn_1}
+    echo https://monitoring.vshn.net/icingadb/hosts?sort=host.state.severity%20desc#!/icingadb/host?name=${INPUT_lb_fqdn_2}
+    sleep 2
+- match: And I remove the LoadBalancers from control.vshn.net
+  description: |-
+    In this step you need to remove the LoadBalancer servers from control.vshn.net
+  inputs:
+  - name: lb_fqdn_1
+  - name: lb_fqdn_2
+  run: |
+    set -euo pipefail
+    echo '###################################################################################'
+    echo '#                                                                                 #'
+    echo "#  Please manually delete the cluster's LoadBalancer servers before proceeding.   #"
+    echo '#                                                                                 #'
+    echo '###################################################################################'
+    echo
+    echo You can go to:
+    echo https://control.vshn.net/servers/definitions/appuio/${INPUT_lb_fqdn_1}/delete
+    echo https://control.vshn.net/servers/definitions/appuio/${INPUT_lb_fqdn_2}/delete
+    sleep 2
+    # NOTE(aa): This step is currently annoying to automate, but once ticket PORTAL-253 is resolved,
+    # it should be easy.
+
+- match: And I decommission the LoadBalancers
+  description: |-
+    This step decommissions resources associated with the Puppet managed LoadBalancers.
+  inputs:
+  - name: commodore_cluster_id
+  - name: lb_fqdn_1
+  - name: lb_fqdn_2
+  - name: lb_backup_1
+  - name: lb_backup_2
+  - name: lb_icinga_1
+  - name: lb_icinga_2
+  run: |
+    set -euo pipefail
+    echo "# Clearing encdata caches ... #"
+    # shellcheck disable=2029
+    ssh nfs1.ch1.puppet.vshn.net "sudo rm /srv/nfs/export/puppetserver-puppetserver-enc-cache-pvc-*/${INPUT_lb_fqdn_1}.yaml" || true
+    # shellcheck disable=2029
+    ssh nfs1.ch1.puppet.vshn.net "sudo rm /srv/nfs/export/puppetserver-puppetserver-enc-cache-pvc-*/${INPUT_lb_fqdn_2}.yaml" || true
+    echo "# Cleared encdata caches. #"
+    echo
+    echo "# Cleaning up LBs in icinga ... #"
+    for parent_zone in $( echo "$INPUT_lb_icinga_1" "$INPUT_lb_icinga_2" | xargs -n 1 | sort -u | paste -s )
+    do
+      if [ "$parent_zone" != "master" ]; then
+        icinga_host="$parent_zone"
+      else
+        icinga_host="master3.prod.monitoring.vshn.net"
+      fi
+      echo "Cleaning up LB from $icinga_host ..."
+      # shellcheck disable=2029
+      ssh "${icinga_host}" "sudo rm -rf /var/lib/icinga2/api/zones/${INPUT_lb_fqdn_1}" || true
+      # shellcheck disable=2029
+      ssh "${icinga_host}" "sudo rm -rf /var/lib/icinga2/api/zones/${INPUT_lb_fqdn_2}" || true
+      if [ "$parent_zone" != "master" ]; then
+        echo "Running puppet on ${icinga_host}"
+        ssh "${icinga_host}" sudo puppetctl run
+      fi
+      echo "Running puppet on icinga master ..."
+      ssh master3.prod.monitoring.vshn.net sudo puppetctl run
+    done
+    echo "# Cleaned up LBs in icinga. #"
+    echo
+    echo "# Removing LBs from nodes hieradata ... #"
+    if [ -e nodes_hieradata ]
+    then
+      rm -rf nodes_hieradata
+    fi
+    git clone git@git.vshn.net:vshn-puppet/nodes_hieradata.git
+    pushd nodes_hieradata
+
+    git rm "${INPUT_lb_fqdn_1}.yaml" || true
+    git rm "${INPUT_lb_fqdn_2}.yaml" || true
+
+    if not git diff-index --quiet HEAD
+    then
+      git commit -m"Decommission LBs for ${INPUT_commodore_cluster_id}"
+      git push origin master
+    fi || true
+
+    popd
+    echo "# Removed LBs from nodes hieradata. #"
+    echo
+    echo "# Removing cluster from Appuio hieradata ... #"
+    if [ -e appuio_hieradata ]
+    then
+      rm -rf appuio_hieradata
+    fi
+    git clone git@git.vshn.net:appuio/appuio_hieradata.git
+    pushd appuio_hieradata
+
+    git rm -rf "lbaas/${INPUT_commodore_cluster_id}"* || true
+
+    if not git diff-index --quiet HEAD
+    then
+      git commit -m"Decommission ${INPUT_commodore_cluster_id}"
+      git push origin master
+    fi || true
+    popd
+    echo "# Removed cluster from Appuio hieradata. #"
+    echo
+    echo "# Deleting backups from Burp server ... #"
+    for lb in "${INPUT_lb_fqdn_1}" "${INPUT_lb_fqdn_2}"
+    do
+      for backup_server in "${INPUT_lb_backup_1}" "${INPUT_lb_backup_2}"
+      do
+        # shellcheck disable=2029
+        ssh "$backup_server" "sudo rm /var/lib/burp/CA/${lb}.crt" || true
+        # shellcheck disable=2029
+        ssh "$backup_server" "sudo rm /var/lib/burp/CA/${lb}.csr" || true
+        backup="/var/lib/burp/${lb}"
+        # shellcheck disable=2029
+        ssh "$backup_server" "sudo rm -rf ${backup}" || true
+      done
+    done
+    echo "# Deleted backups from Burp server. #"
+
+- match: And I remove the cluster's DNS entries
+  description: |-
+    In this step, you must manually remove any DNS entries associated with the cluster from https://git.vshn.net/vshn/vshn_zonefiles.
+  run: |
+    set -euo pipefail
+    echo '#########################################################################'
+    echo '#                                                                       #'
+    echo "#  Please manually delete the cluster's DNS entries before proceeding.  #"
+    echo '#                                                                       #'
+    echo '#########################################################################'
+    sleep 2
+
+- match: Then I delete the cluster's Vault secrets
+  description: |-
+    This step cleans up all the cluster's Vault secrets.
+  inputs:
+  - name: commodore_cluster_id
+  - name: commodore_api_url
+  - name: vault_address
+  - name: backup_deletion_confirmation
+  run: |
+    set -euo pipefail
+    export COMMODORE_API_URL="${INPUT_commodore_api_url}"
+
+    LIEUTENANT_AUTH="Authorization: Bearer $(commodore fetch-token)"
+    REPO_URL=$(curl -sH "${LIEUTENANT_AUTH}" "${INPUT_commodore_api_url}/clusters/${INPUT_commodore_cluster_id}" | jq -r .gitRepo.url)
+
+    if [ -e catalog ]
+    then
+      rm -rf catalog
+    fi
+
+    mkdir catalog
+    git archive --remote "${REPO_URL}" master | tar -xC catalog
+
+    PASSWORD_KEY="$(yq -o=json 'select(.kind == "Secret" and .metadata.name == "objects-backup-password") | .stringData.password' catalog/manifests/cluster-backup/10_object.yaml | cut -d: -f2)"
+    ID_KEY="$(yq -o=json 'select(.kind == "Secret" and .metadata.name == "objects-backup-s3-credentials") | .stringData.username' catalog/manifests/cluster-backup/10_object.yaml | cut -d: -f2)"
+    SECRET_KEY="$(yq -o=json 'select(.kind == "Secret" and .metadata.name == "objects-backup-s3-credentials") | .stringData.password' catalog/manifests/cluster-backup/10_object.yaml | cut -d: -f2)"
+
+    export VAULT_ADDR=${INPUT_vault_address}
+    vault login -method=oidc
+
+    for secret in $(find catalog/refs/ -type f \
+      | sed -r -e 's#catalog/refs#clusters/kv#' -e 's#(.*)/.*#\1#' \
+      | grep -v '__shared__/__shared__' \
+      | sort -u);
+    do
+      if [[ ${INPUT_backup_deletion_confirmation} == "YES" ]]
+      then
+        vault kv delete "$secret"
+      else
+        # exclude backup credentials because the backup still exists
+        if echo "$PASSWORD_KEY $ID_KEY $SECRET_KEY" | grep "${secret##clusters/kv/}" > /dev/null
+        then
+          echo "Skipping key '$secret' as it is required to access cluster backups."
+        else
+          vault kv delete "$secret"
+        fi
+      fi
+    done
+
+- match: And I delete the cluster's OpsGenie heartbeat
+  description: |-
+    This step deletes the cluster's OpsGenie heartbeat.
+  inputs:
+  - name: vault_address
+  - name: commodore_cluster_id
+  run: |
+    set -euo pipefail
+    export VAULT_ADDR=${INPUT_vault_address}
+    vault login -method=oidc
+    OPSGENIE_KEY=$(vault kv get -format=json \
+      clusters/kv/__shared__/__shared__/opsgenie/aldebaran | \
+      jq -r '.data.data["heartbeat-password"]')
+
+    curl "https://api.opsgenie.com/v2/heartbeats/${INPUT_commodore_cluster_id}" \
+      -H"Authorization: GenieKey ${OPSGENIE_KEY}" \
+      -XDELETE
+- match: And I delete the cluster from Lieutenant
+  description: |-
+    This step deletes the cluster from Lieutenant
+  inputs:
+  - name: commodore_cluster_id
+  - name: commodore_api_url
+  run: |
+    set -euo pipefail
+    echo '###########################################################################'
+    echo '#                                                                         #'
+    echo '#  Please manually delete the cluster from Lieutenant before proceeding.  #'
+    echo '#                                                                         #'
+    echo '###########################################################################'
+    echo
+    lieutenant=vshn-lieutenant-prod
+    if [[ ${INPUT_commodore_api_url} == *int* ]]
+    then
+      lieutenant=vshn-lieutenant-int
+    fi
+    if [[ ${INPUT_commodore_api_url} == *dev* ]]
+    then
+      lieutenant=vshn-lieutenant-dev
+    fi
+    echo You can go to https://control.vshn.net/syn/lieutenantclusters/${lieutenant}/${INPUT_commodore_cluster_id}/_delete
+    sleep 2
+
+- match: And I delete the Keycloak service
+  inputs:
+  - name: commodore_cluster_id
+  description: |-
+    This step deletes the cluster's keycloak service from control.vshn.net
+  run: |
+    set -euo pipefail
+    echo '##############################################################################'
+    echo '#                                                                            #'
+    echo "#  Please manually delete the cluster's keycloak service before proceeding.  #"
+    echo '#                                                                            #'
+    echo '##############################################################################'
+    echo
+    echo You can go to https://control.vshn.net/vshn/services/${INPUT_commodore_cluster_id}/delete
+    sleep 2
+
+- match: And I remove the cluster from openshift4-clusters
+  description: |-
+    This step removes the cluster from https://git.vshn.net/vshn/openshift4-clusters
+  inputs:
+  - name: commodore_cluster_id
+  - name: gitlab_api_token
+  run: |
+    set -euo pipefail
+    if [ -e openshift4-clusters ]
+    then
+      rm -rf openshift4-clusters
+    fi
+    git clone git@git.vshn.net:vshn/openshift4-clusters.git
+    pushd openshift4-clusters
+
+    git rm -rf "${INPUT_commodore_cluster_id}" || true
+
+    if not git diff-index --quiet HEAD
+    then
+      git checkout -b "remove-${INPUT_commodore_cluster_id}"
+      git commit -m"Remove ${INPUT_commodore_cluster_id}"
+      git push origin "remove-${INPUT_commodore_cluster_id}"
+
+      auth="PRIVATE-TOKEN: ${INPUT_gitlab_api_token}"
+
+      response=$( curl -s -XPOST -H"$auth" -H"Content-Type: application/json" https://git.vshn.net/api/v4/projects/57660/merge_requests -d'{"source_branch":"'remove-${INPUT_commodore_cluster_id}'","target_branch":"main","title":"Remove cluster '${INPUT_commodore_cluster_id}'"}' )
+      echo
+      echo ">>> Please review and merge the MR at $( echo "$response" | jq -r .web_url )"
+      echo
+    fi || true
+    popd

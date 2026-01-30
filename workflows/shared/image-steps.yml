@@ -1,0 +1,40 @@
+steps:
+- match: Then I download the OpenShift image for version "(?P<image_name>[^"]+)"
+  description: |-
+    This step downloads the OpenShift image for the version specified by in the step.
+
+    If the image already exists locally, it skips the download.
+  outputs:
+  - name: image_path
+  - name: image_major
+  - name: image_minor
+  - name: image_patch
+  run: |
+    set -euo pipefail
+
+    . ./workflows/cloudscale/scripts/semver.sh
+
+    MAJOR=0
+    MINOR=0
+    PATCH=0
+    SPECIAL=""
+    semverParseInto "$MATCH_image_name" MAJOR MINOR PATCH SPECIAL
+
+    image_path="rhcos-$MAJOR.$MINOR.qcow2"
+
+    env -i "image_major=$MAJOR" >> "$OUTPUT"
+    env -i "image_minor=$MINOR" >> "$OUTPUT"
+    env -i "image_patch=$PATCH" >> "$OUTPUT"
+
+    echo "Image is $image_path"
+
+    if [ -f "$image_path" ]; then
+      echo "Image $image_path already exists, skipping download."
+      env -i "image_path=$image_path" >> "$OUTPUT"
+      exit 0
+    fi
+
+    echo Downloading OpenShift image "$MATCH_image_name" to "$image_path"
+
+    curl -L "https://mirror.openshift.com/pub/openshift-v4/dependencies/rhcos/${MAJOR}.${MINOR}/${MATCH_image_name}/rhcos-${MATCH_image_name}-x86_64-openstack.x86_64.qcow2.gz" | gzip -d > "$image_path"
+    env -i "image_path=$image_path" >> "$OUTPUT"
