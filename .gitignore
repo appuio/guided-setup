@@ -8,30 +8,12 @@
 *.so
 *.dylib
 
-guided-setup
-
-# Test binary, built with `go test -c`
-*.test
-
-# Code coverage profiles and other test artifacts
-*.out
-coverage.*
-*.coverprofile
-profile.cov
-
-# Dependency directories (remove the comment below to include it)
-# vendor/
-
-# Go workspace file
-go.work
-go.work.sum
-
 # env file
 .env
 
 # Editor/IDE
-# .idea/
-# .vscode/
+.idea/
+.vscode/
 
 
 # Commodore
@@ -45,6 +27,7 @@ vendor/
 
 # Other detritus from setup runs
 .guided-setup-state.json*
+.gandalf-state.json*
 *_hieradata/
 rhcos-*.qcow2
 ssh_*
