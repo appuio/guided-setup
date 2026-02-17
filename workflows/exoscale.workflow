@@ -16,18 +16,20 @@ And I check the cluster domain
 And I prepare the cluster repository
 Then I configure the OpenShift installer
 And I configure Terraform for team "aldebaran"
+And I configure Terraform for Exoscale
 
-# Then I provision the loadbalancers
-# And I provision the bootstrap node
-# And I provision the control plane
-# Then I deploy initial manifests
-# And I wait for bootstrap to complete
-# Then I provision the remaining nodes
-# And I approve and label the new nodes
-# And I configure initial deployments
-# And I wait for installation to complete
-# And I create the registry S3 secret
-# 
+Then I provision the loadbalancers
+And I provision the bootstrap node
+And I provision the control plane
+Then I deploy initial manifests
+And I wait for bootstrap to complete
+Then I provision the remaining nodes
+And I approve and label the new nodes
+And I configure initial deployments
+And I wait for installation to complete
+Then I create the registry S3 secret
+# And I enable default instance pool annotation injector for LB services
+
 # Then I synthesize the cluster
 # Then I set acme-dns CNAME records
 # 
