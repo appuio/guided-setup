@@ -30,38 +30,196 @@ steps:
 
     if which aws >/dev/null 2>&1 ; then { echo "✅ aws (AWS CLI) is installed."; } ; else { echo "❌ aws (AWS CLI) is not installed. Please install aws to proceed. Our recommended installer is uv: 'uv tool install awscli'"; exit 1; } ; fi
 
+    if which exo >/dev/null 2>&1 ; then { echo "✅ exo (Exoscale CLI) is installed."; } ; else { echo "❌ exo (Exoscale CLI) is not installed. Please install exo to proceed. See: https://community.exoscale.com/tools/command-line-interface/"; exit 1; } ; fi
+
     if which restic >/dev/null 2>&1 ; then { echo "✅ restic (Backup CLI) is installed."; } ; else { echo "❌ restic (Backup CLI) is not installed. Please install restic to proceed."; exit 1; } ; fi
+
+    if which gzip >/dev/null 2>&1 ; then { echo "✅ gzip (file compression) is installed."; } ; else { echo "❌ gzip (file compression) is not installed. Please install gzip to proceed."; exit 1; } ; fi
+
+    if which md5sum >/dev/null 2>&1 ; then { echo "✅ md5sum (file checksums) is installed."; } ; else { echo "❌ md5sum (file checksums) is not installed. Please install md5sum to proceed."; exit 1; } ; fi
+
+    if which virt-edit >/dev/null 2>&1 ; then { echo "✅ virt-edit (VM image editing) is installed."; } ; else { echo "❌ virt-edit (VM image editing) is not installed. Please install virt-edit to proceed."; exit 1; } ; fi
+
+    if which cpio >/dev/null 2>&1 ; then { echo "✅ cpio (file archiving) is installed."; } ; else { echo "❌ cpio (file archiving) is not installed. Please install cpio to proceed."; exit 1; } ; fi
 
     if which emergency-credentials-receive >/dev/null 2>&1 ; then { echo "✅ emergency-credentials-receive (Cluster emergency access helper) is installed."; } ; else { echo "❌ emergency-credentials-receive is not installed. Please install it from https://github.com/vshn/emergency-credentials-receive ."; exit 1; } ; fi
 
     echo "✅ All prerequisites are met."
-- match: And Cloudscale API tokens
+- match: And Exoscale API tokens
   inputs:
-  - name: cloudscale_token
+  - name: exoscale_key
     description: |-
-      Cloudscale API token with read+write permissions.
+      Exoscale API Key name
 
-      Used for setting up the cluster and for the machine api provider.
-  - name: cloudscale_token_floaty
+      Used for setting up or tearing down the cluster with terraform
+  - name: exoscale_secret
     description: |-
-      Cloudscale API token with read+write permissions.
+      Exoscale API secret
 
-      Used for managing the floating IPs.
+      Used for setting up or tearing down the cluster with terraform
+  - name: csp_region
+    description: |-
+      Name of the exoscale zone in which to set up the cluster.
+
+      All lowercase. For example: ch-dk-2
+  outputs:
+  - name: exoscale_s3_endpoint
   description: |-
-    Create 2 new cloudscale API tokens with read+write permissions and name them
-    <cluster_id> and <cluster_id>_floaty on control.cloudscale.ch/service/<your-project>/api-token.
+    Create a new Exoscale API key in the correct project, with IAMv3 role "Owner".
 
-    This step currently does not validate whether the tokens have read permission.
+    This step currently does not validate the token's access scope.
   run: |
     set -euo pipefail
-    if [[ $( curl -sH "Authorization: Bearer ${INPUT_cloudscale_token}" https://api.cloudscale.ch/v1/flavors -o /dev/null -w"%{http_code}" ) != 200 ]]
+    export EXOSCALE_API_KEY="${INPUT_exoscale_key}"
+    export EXOSCALE_API_SECRET="${INPUT_exoscale_secret}"
+    exo limits > /dev/null || { echo "Invalid token!" ; exit 1 ; }
+    echo "Token is valid"
+    env -i "exoscale_s3_endpoint=sos-${INPUT_csp_region}.exo.io" >> "$OUTPUT"
+- match: Then I check the Exoscale resource quotas
+  inputs:
+  - name: exoscale_key
+  - name: exoscale_secret
+  description: |-
+    Checks the quotas in your Exoscale org for DNS and instances.
+
+    If the quotas are too low, you must manually increase them.
+  run: |
+    set -euo pipefail
+    export EXOSCALE_API_KEY="${INPUT_exoscale_key}"
+    export EXOSCALE_API_SECRET="${INPUT_exoscale_secret}"
+
+    instances_used="$( exo limits -Ojson | jq '.[] | select(.resource == "Compute instances").used'  )"
+    instances_max="$( exo limits -Ojson | jq '.[] | select(.resource == "Compute instances").max'  )"
+
+    if (( instances_max - instances_used < 15 ))
     then
-      echo "Cloudscale token not valid!"
+      echo "Instance quota is insufficient! Please increase the instance quota."
+      echo "Visit https://portal.exoscale.com/u/$( exo x get-organization | jq -r .id )/organization/quotas "
+      exit 1
     fi
-    if [[ $( curl -sH "Authorization: Bearer ${INPUT_cloudscale_token_floaty}" https://api.cloudscale.ch/v1/flavors -o /dev/null -w"%{http_code}" ) != 200 ]]
-    then
-      echo "Cloudscale Floaty token not valid!"
+    echo "Instance quota is sufficient"
+
+    echo '###################################################################################'
+    echo '#                                                                                 #'
+    echo '#  Please check the DNS subscription and upgrade it if no DNS Domains are left.   #'
+    echo '#                                                                                 #'
+    echo '###################################################################################'
+    echo
+    echo "See https://portal.exoscale.com/u/$( exo x get-organization | jq -r .id )/dns"
+
+- match: Then I create the necessary Exoscale IAM keys
+  description: |-
+    This step creates restricted API keys for object storage, CSI driver, and CCM.
+  inputs:
+  - name: exoscale_key
+  - name: exoscale_secret
+  - name: commodore_cluster_id
+  outputs:
+  - name: s3_key
+  - name: s3_secret
+  - name: csi_key
+  - name: csi_secret
+  - name: ccm_key
+  - name: ccm_secret
+  run: |
+    set -euo pipefail
+    export EXOSCALE_API_KEY="${INPUT_exoscale_key}"
+    export EXOSCALE_API_SECRET="${INPUT_exoscale_secret}"
+
+    echo "Create SOS IAM role, if it doesn't exist yet in the organization"
+    sos_iam_role_id=$(exo iam role list -O json | \
+      jq -r '.[] | select(.name=="sos-full-access") | .key')
+    if [ -z "${sos_iam_role_id}" ]; then
+    echo '{
+      "default-service-strategy": "deny",
+      "services": {
+        "sos": {"type": "allow"}
+      }
+    }' | \
+    exo iam role create sos-full-access \
+      --description "Full access to object storage service" \
+      --policy -
     fi
+    echo "TODO: Check whether the key with that name already exists"
+    # Create access key
+    exoscale_s3_credentials=$(exo iam api-key create -O json \
+      "${INPUT_commodore_cluster_id}_object_storage" sos-full-access)
+    EXOSCALE_S3_ACCESSKEY=$(echo "${exoscale_s3_credentials}" | jq -r '.key')
+    EXOSCALE_S3_SECRETKEY=$(echo "${exoscale_s3_credentials}" | jq -r '.secret')
+
+    echo
+    echo "Create Exoscale CSI driver Exoscale IAM role, if it doesn't exist yet in the organization"
+    csidriver_role_id=$(exo iam role list -O json | \
+      jq -r '.[] | select(.name=="csi-driver-exoscale") | .key')
+    if [ -z "${csidriver_role_id}" ]; then
+    cat << EOF | exo iam role create csi-driver-exoscale \
+      --description "Exoscale CSI Driver: Access to storage operations and zone list" \
+      --policy -
+    {
+      "default-service-strategy": "deny",
+      "services": {
+        "compute": {
+          "type": "rules",
+          "rules": [
+            {
+              "expression": "operation in ['list-zones', 'get-block-storage-volume', 'list-block-storage-volumes', 'create-block-storage-volume', 'delete-block-storage-volume', 'attach-block-storage-volume-to-instance', 'detach-block-storage-volume', 'update-block-storage-volume-labels', 'resize-block-storage-volume', 'get-block-storage-snapshot', 'list-block-storage-snapshots', 'create-block-storage-snapshot', 'delete-block-storage-snapshot']",
+              "action": "allow"
+            }
+          ]
+        }
+      }
+    }
+    EOF
+    fi
+    echo "TODO: Check whether the key with that name already exists"
+    # Create access key
+    csi_credentials=$(exo iam api-key create -O json \
+      "${INPUT_commodore_cluster_id}_csi-driver-exoscale" csi-driver-exoscale)
+    CSI_ACCESSKEY=$(echo "${csi_credentials}" | jq -r '.key')
+    CSI_SECRETKEY=$(echo "${csi_credentials}" | jq -r '.secret')
+
+    echo
+    echo "Create Exoscale CCM Exoscale IAM role, if it doesn't exist yet in the organization"
+    ccm_role_id=$(exo iam role list -O json | \
+      jq -r '.[] | select(.name=="ccm-exoscale") | .key')
+    if [ -z "${ccm_role_id}" ]; then
+    cat <<EOF | exo iam role create ccm-exoscale \
+      --description "Exoscale CCM: Allow managing NLBs and reading instances/instance pools" \
+      --policy -
+    {
+      "default-service-strategy": "deny",
+      "services": {
+        "compute": {
+          "type": "rules",
+          "rules": [
+            {
+              "expression": "operation in ['add-service-to-load-balancer', 'create-load-balancer', 'delete-load-balancer', 'delete-load-balancer-service', 'get-load-balancer', 'get-load-balancer-service', 'get-operation', 'list-load-balancers', 'reset-load-balancer-field', 'reset-load-balancer-service-field', 'update-load-balancer', 'update-load-balancer-service']",
+              "action": "allow"
+            },
+            {
+              "expression": "operation in ['get-instance', 'get-instance-pool', 'get-instance-type', 'list-instances', 'list-instance-pools', 'list-zones']",
+              "action": "allow"
+            }
+          ]
+        }
+      }
+    }
+    EOF
+    fi
+    echo "TODO: Check whether the key with that name already exists"
+    # Create access key
+    ccm_credentials=$(exo iam api-key create -O json \
+      "${INPUT_commodore_cluster_id}_ccm-exoscale" ccm-exoscale)
+    CCM_ACCESSKEY=$(echo "${ccm_credentials}" | jq -r '.key')
+    CCM_SECRETKEY=$(echo "${ccm_credentials}" | jq -r '.secret')
+
+    env -i "s3_key=${EXOSCALE_S3_ACCESSKEY}" >> "$OUTPUT"
+    env -i "s3_secret=${EXOSCALE_S3_SECRETKEY}" >> "$OUTPUT"
+    env -i "csi_key=${CSI_ACCESSKEY}" >> "$OUTPUT"
+    env -i "csi_secret=${CSI_SECRETKEY}" >> "$OUTPUT"
+    env -i "ccm_key=${CCM_ACCESSKEY}" >> "$OUTPUT"
+    env -i "ccm_secret=${CCM_SECRETKEY}" >> "$OUTPUT"
+
 - match: Then I set secrets in Vault
   description: |-
     This step stores the collected secrets and tokens in the ProjectSyn Vault.
@@ -73,9 +231,13 @@ steps:
       https://vault-prod.syn.vshn.net/ for production clusters.
   - name: commodore_cluster_id
   - name: commodore_tenant_id
-  - name: bucket_user
-  - name: cloudscale_token
-  - name: cloudscale_token_floaty
+  - name: s3_key
+  - name: s3_secret
+  - name: csi_key
+  - name: csi_secret
+  - name: ccm_key
+  - name: ccm_secret
+
   outputs:
   - name: hieradata_repo_user
   - name: hieradata_repo_token
@@ -85,15 +247,10 @@ steps:
     export VAULT_ADDR=${INPUT_vault_address}
     vault login -method=oidc
 
-    # Set the cloudscale.ch access secrets
-    vault kv put clusters/kv/${INPUT_commodore_tenant_id}/${INPUT_commodore_cluster_id}/cloudscale \
-      token=${INPUT_cloudscale_token} \
-      s3_access_key="$(echo "${INPUT_bucket_user}" | jq -r '.keys[0].access_key')" \
-      s3_secret_key="$(echo "${INPUT_bucket_user}" | jq -r '.keys[0].secret_key')"
-
-    # Put LB API key in Vault
-    vault kv put clusters/kv/${INPUT_commodore_tenant_id}/${INPUT_commodore_cluster_id}/floaty \
-      iam_secret="${INPUT_cloudscale_token_floaty}"
+    # Set the Exoscale object storage API key
+    vault kv put clusters/kv/${INPUT_commodore_tenant_id}/${INPUT_commodore_cluster_id}/exoscale/storage_iam \
+      s3_access_key=${INPUT_s3_key} \
+      s3_secret_key=${INPUT_s3_secret}
 
     # Generate an HTTP secret for the registry
     vault kv put clusters/kv/${INPUT_commodore_tenant_id}/${INPUT_commodore_cluster_id}/registry \
@@ -106,6 +263,17 @@ steps:
     # Generate a password for the cluster object backups
     vault kv put clusters/kv/${INPUT_commodore_tenant_id}/${INPUT_commodore_cluster_id}/cluster-backup \
       password="$(LC_ALL=C tr -cd "A-Za-z0-9" </dev/urandom | head -c 32)"
+
+    # Set the CSI Driver Exoscale Credentials
+    vault kv put clusters/kv/${INPUT_commodore_tenant_id}/${INPUT_commodore_cluster_id}/exoscale/csi_driver \
+      access_key=${INPUT_csi_key} \
+      secret_key=${INPUT_csi_secret}
+
+    # Set the CCM Exoscale Credentials
+    vault kv put clusters/kv/${INPUT_commodore_tenant_id}/${INPUT_commodore_cluster_id}/exoscale/ccm \
+      access_key=${INPUT_ccm_key} \
+      secret_key=${INPUT_ccm_secret}
+
 
     hieradata_repo_secret=$(vault kv get \
       -format=json "clusters/kv/lbaas/hieradata_repo_token" | jq '.data.data')
@@ -120,9 +288,7 @@ steps:
   - name: commodore_api_url
   - name: commodore_cluster_id
   - name: commodore_tenant_id
-  - name: hieradata_repo_user
   - name: cluster_domain
-  - name: hieradata_repo_token
   - name: image_major
   - name: image_minor
   run: |
@@ -146,26 +312,13 @@ steps:
       git diff --exit-code --quiet || git commit -a -m "Include openshift4 class for ${INPUT_commodore_cluster_id}"
     fi
 
-    yq eval -i '.parameters.openshift.cloudscale.subnet_uuid = "TO_BE_DEFINED"' ${INPUT_commodore_cluster_id}.yml
-
-    yq eval -i '.parameters.openshift.cloudscale.rhcos_image_slug = "rhcos-4.19"' \
-      ${INPUT_commodore_cluster_id}.yml
-
-    yq eval -i ".parameters.openshift4_terraform.terraform_variables.ignition_ca = \"TO_BE_DEFINED\"" \
-      ${INPUT_commodore_cluster_id}.yml
-
-    git diff --exit-code --quiet || git commit -a -m "Configure Cloudscale metaparameters on ${INPUT_commodore_cluster_id}"
-
-    yq eval -i '.applications += ["cloudscale-loadbalancer-controller"]' ${INPUT_commodore_cluster_id}.yml
+    yq eval -i '.applications += ["exoscale-cloud-controller-manager"]' ${INPUT_commodore_cluster_id}.yml
     yq eval -i '.applications = (.applications | unique)' ${INPUT_commodore_cluster_id}.yml
-    cat ${INPUT_commodore_cluster_id}.yml
+    git diff --exit-code --quiet || git commit -a -m "Deploy Exoscale cloud-controller-manager on ${INPUT_commodore_cluster_id}"
 
-    git diff --exit-code --quiet || git commit -a -m "Enable cloudscale loadbalancer controller for ${INPUT_commodore_cluster_id}"
 
     yq eval -i '.applications += ["cilium"]' ${INPUT_commodore_cluster_id}.yml
     yq eval -i '.applications = (.applications | unique)' ${INPUT_commodore_cluster_id}.yml
-
-    yq eval -i '.parameters.networkpolicy.networkPlugin = "cilium"' ${INPUT_commodore_cluster_id}.yml
 
     yq eval -i '.parameters.openshift.infraID = "TO_BE_DEFINED"' ${INPUT_commodore_cluster_id}.yml
     yq eval -i '.parameters.openshift.clusterID = "TO_BE_DEFINED"' ${INPUT_commodore_cluster_id}.yml
@@ -186,23 +339,26 @@ steps:
 
 - match: Then I configure the OpenShift installer
   description: |-
-    This step configures the OpenShift installer for the Cloudscale cluster by generating
+    This step configures the OpenShift installer for the Exoscale cluster by generating
     the necessary installation files using Commodore.
   inputs:
+  - name: exoscale_key
+  - name: exoscale_secret
   - name: commodore_cluster_id
   - name: commodore_tenant_id
   - name: base_domain
   - name: cluster_domain
   - name: vault_address
   - name: redhat_pull_secret
-  - name: csp_region
-  - name: bucket_user
-  - name: cloudscale_token
+  - name: ccm_key
+  - name: ccm_secret
   outputs:
   - name: ignition_bootstrap
   - name: ssh_public_key_path
   run: |
     set -euo pipefail
+    export EXOSCALE_API_KEY="${INPUT_exoscale_key}"
+    export EXOSCALE_API_SECRET="${INPUT_exoscale_secret}"
 
     export VAULT_ADDR="${INPUT_vault_address}"
     vault login -method=oidc
@@ -212,10 +368,10 @@ steps:
 
     env -i "ssh_public_key_path=$ssh_public_key" >> "$OUTPUT"
 
-    if vault kv get -format=json clusters/kv/${INPUT_commodore_tenant_id}/${INPUT_commodore_cluster_id}/cloudscale/ssh >/dev/null 2>&1; then
+    if vault kv get -format=json clusters/kv/${INPUT_commodore_tenant_id}/${INPUT_commodore_cluster_id}/exoscale/ssh >/dev/null 2>&1; then
       echo "SSH keypair for cluster ${INPUT_commodore_cluster_id} already exists in Vault, skipping generation."
 
-      vault kv get -format=json clusters/kv/${INPUT_commodore_tenant_id}/${INPUT_commodore_cluster_id}/cloudscale/ssh | \
+      vault kv get -format=json clusters/kv/${INPUT_commodore_tenant_id}/${INPUT_commodore_cluster_id}/exoscale/ssh | \
         jq -r '.data.data.private_key|@base64d' > "${ssh_private_key}"
 
       chmod 600 "${ssh_private_key}"
@@ -231,7 +387,7 @@ steps:
         base64_no_wrap='base64 --wrap 0'
       fi
 
-      vault kv put clusters/kv/${INPUT_commodore_tenant_id}/${INPUT_commodore_cluster_id}/cloudscale/ssh \
+      vault kv put clusters/kv/${INPUT_commodore_tenant_id}/${INPUT_commodore_cluster_id}/exoscale/ssh \
         private_key="$(cat "$ssh_private_key" | eval "$base64_no_wrap")"
     fi
 
@@ -247,13 +403,13 @@ steps:
     cat > "${installer_dir}/install-config.yaml" <<EOF
     apiVersion: v1
     metadata:
-      name: ${INPUT_commodore_cluster_id}
-    baseDomain: ${INPUT_base_domain}
+      name: ${INPUT_commodore_cluster_id} 
+    baseDomain: ${INPUT_base_domain} 
     platform:
       external:
-        platformName: cloudscale
+        platformName: exoscale
         cloudControllerManager: External
-    networking:
+    networking: 
       networkType: Cilium
     pullSecret: |
       ${INPUT_redhat_pull_secret}
@@ -271,12 +427,13 @@ steps:
         $machineconfigs
     fi
 
-    echo Copying Cloudscale CCM manifests...
-    for f in catalog/manifests/cloudscale-cloud-controller-manager/*; do
-      cp "$f" "${installer_dir}/manifests/cloudscale_ccm_$(basename "$f")"
+    echo Copying Exoscale CCM manifests...
+    for f in catalog/manifests/exoscale-cloud-controller-manager/manager/*; do
+      cp "$f" "${installer_dir}/manifests/exoscale_ccm_$(basename "$f")"
     done
-    yq -i e ".stringData.access-token=\"${INPUT_cloudscale_token}\"" \
-      "${installer_dir}/manifests/cloudscale_ccm_01_secret.yaml"
+    
+    yq -i e ".stringData.api-key=\"${INPUT_ccm_key}\",.stringData.api-secret=\"${INPUT_ccm_secret}\"" \
+      "${installer_dir}/manifests/exoscale_ccm_01_secret.yaml"
 
     echo Copying Cilium OLM manifests...
     for f in catalog/manifests/cilium/olm/[a-z]*; do
@@ -317,33 +474,68 @@ steps:
     openshift-install --dir "${installer_dir}" \
       create ignition-configs
 
-    mc alias set \
-      "${INPUT_commodore_cluster_id}" "https://objects.${INPUT_csp_region}.cloudscale.ch" \
-      "$(echo "$INPUT_bucket_user" | jq -r '.keys[0].access_key')" \
-      "$(echo "$INPUT_bucket_user" | jq -r '.keys[0].secret_key')"
-
-    mc cp "${installer_dir}/bootstrap.ign" "${INPUT_commodore_cluster_id}/${INPUT_commodore_cluster_id}-bootstrap-ignition/"
-
-    ignition_bootstrap=$(mc share download \
-      --json --expire=4h \
-      "${INPUT_commodore_cluster_id}/${INPUT_commodore_cluster_id}-bootstrap-ignition/bootstrap.ign" | jq -r '.share')
-
-    env -i "ignition_bootstrap=$ignition_bootstrap" >> "$OUTPUT"
+    exo storage upload "${installer_dir}/bootstrap.ign" "sos://${INPUT_commodore_cluster_id}-bootstrap" --acl public-read
 
     echo "✅ OpenShift installer configured successfully."
+
+- match: And I configure Terraform for Exoscale
+  description: |-
+    Review the file ./inventory/classes/${INPUT_commodore_tenant_id}/${INPUT_commodore_cluster_id}.yml. 
+    Override default parameters or add more component configurations as required for your cluster. 
+    
+    Then press enter to commit and compile.
+  inputs:
+  - name: commodore_api_url
+  - name: commodore_cluster_id
+  - name: commodore_tenant_id
+  - name: image_major
+  - name: image_minor
+  - name: rhcos_template
+  - name: ssh_public_key_path
+  run: |
+    set -euo pipefail
+
+    export COMMODORE_API_URL="${INPUT_commodore_api_url}"
+    export CLUSTER_ID="${INPUT_commodore_cluster_id}"
+    export TENANT_ID="${INPUT_commodore_tenant_id}"
+
+    pushd "inventory/classes/${TENANT_ID}/"
+
+    yq eval -i ".parameters.openshift4_terraform.terraform_variables.ssh_key = \"$(cat ${INPUT_ssh_public_key_path})\"" \
+      ${INPUT_commodore_cluster_id}.yml
+
+    # TODO: We should remove the writing of the ssh key to the terraform variables from the shared steps, 
+    # since cloudscale wants an array and exoscale wants a string.
+    yq -i "del(.parameters.openshift4_terraform.terraform_variables.ssh_keys)" ${INPUT_commodore_cluster_id}.yml
+
+    yq eval -i ".parameters.openshift4_terraform.terraform_variables.rhcos_template = \"${INPUT_rhcos_template}\"" ${CLUSTER_ID}.yml
+
+    echo "Commit changes"
+    git commit -a -m "Set Exoscale specific values in cluster ${CLUSTER_ID}"
+    git push
+
+    popd
+
+    echo "Compile and push cluster catalog"
+    commodore catalog compile ${CLUSTER_ID} --push \
+      --dynamic-fact kubernetesVersion.major=1 \
+      --dynamic-fact kubernetesVersion.minor="$((INPUT_image_minor+13))" \
+      --dynamic-fact openshiftVersion.Major=${INPUT_image_major} \
+      --dynamic-fact openshiftVersion.Minor=${INPUT_image_minor}
+
+    echo "✅ Changes committed and cluster catalog compiled successfully."
 
 - match: Then I provision the loadbalancers
   description: |-
     This step provisions the load balancers for the Cloudscale OpenShift cluster using Terraform.
   inputs:
-  - name: cloudscale_token
-  - name: cloudscale_token_floaty
+  - name: exoscale_key
+  - name: exoscale_secret
+  - name: commodore_cluster_id
   - name: control_vshn_api_token
-  - name: ignition_bootstrap
   - name: hieradata_repo_token
   - name: gitlab_user_name
   - name: gitlab_api_token
-  - name: commodore_cluster_id
   - name: commodore_api_url
   - name: cluster_domain
   outputs:
@@ -353,17 +545,20 @@ steps:
     set -euo pipefail
 
     export COMMODORE_API_URL="${INPUT_commodore_api_url}"
+    export CLUSTER_ID="${INPUT_commodore_cluster_id}"
+    export GITLAB_TOKEN="${INPUT_gitlab_api_token}"
+    export GITLAB_USER="${INPUT_gitlab_user_name}"
 
     cat <<EOF > ./terraform.env
-    CLOUDSCALE_API_TOKEN=${INPUT_cloudscale_token}
-    TF_VAR_ignition_bootstrap=${INPUT_ignition_bootstrap}
-    TF_VAR_lb_cloudscale_api_secret=${INPUT_cloudscale_token_floaty}
-    TF_VAR_control_vshn_net_token=${INPUT_control_vshn_api_token}
+    EXOSCALE_API_KEY="${INPUT_exoscale_key}"
+    EXOSCALE_API_SECRET="${INPUT_exoscale_secret}"
+    TF_VAR_control_vshn_net_token="${INPUT_control_vshn_api_token}"
     GIT_AUTHOR_NAME=$(git config --global user.name)
     GIT_AUTHOR_EMAIL=$(git config --global user.email)
-    HIERADATA_REPO_TOKEN=${INPUT_hieradata_repo_token}
+    HIERADATA_REPO_TOKEN="${INPUT_hieradata_repo_token}"
     EOF
 
+    # Set terraform image and tag to be used
     tf_image=$(\
       yq eval ".parameters.openshift4_terraform.images.terraform.image" \
       dependencies/openshift4-terraform/class/defaults.yml)
@@ -371,24 +566,23 @@ steps:
       yq eval ".parameters.openshift4_terraform.images.terraform.tag" \
       dependencies/openshift4-terraform/class/defaults.yml)
 
-    echo "Using Terraform image: ${tf_image}:${tf_tag}"
-
+    # Generate the terraform alias
     base_dir=$(pwd)
     alias terraform='touch .terraformrc; docker run --rm -e REAL_UID=$(id -u) -e TF_CLI_CONFIG_FILE=/tf/.terraformrc --env-file ${base_dir}/terraform.env -w /tf -v $(pwd):/tf --ulimit memlock=-1 "${tf_image}:${tf_tag}" /tf/terraform.sh'
 
-    gitlab_repository_url=$(curl -sH "Authorization: Bearer $(commodore fetch-token)" ${INPUT_commodore_api_url}/clusters/${INPUT_commodore_cluster_id} | jq -r '.gitRepo.url' | sed 's|ssh://||; s|/|:|')
-    gitlab_repository_name=${gitlab_repository_url##*/}
-    gitlab_catalog_project_id=$(curl -sH "Authorization: Bearer ${INPUT_gitlab_api_token}" "https://git.vshn.net/api/v4/projects?simple=true&search=${gitlab_repository_name/.git}" | jq -r ".[] | select(.ssh_url_to_repo == \"${gitlab_repository_url}\") | .id")
-    gitlab_state_url="https://git.vshn.net/api/v4/projects/${gitlab_catalog_project_id}/terraform/state/cluster"
+    export GITLAB_REPOSITORY_URL=$(curl -sH "Authorization: Bearer $(commodore fetch-token)" ${COMMODORE_API_URL}/clusters/${CLUSTER_ID} | jq -r '.gitRepo.url' | sed 's|ssh://||; s|/|:|')
+    export GITLAB_REPOSITORY_NAME=${GITLAB_REPOSITORY_URL##*/}
+    export GITLAB_CATALOG_PROJECT_ID=$(curl -sH "Authorization: Bearer ${GITLAB_TOKEN}" "https://git.vshn.net/api/v4/projects?simple=true&search=${GITLAB_REPOSITORY_NAME/.git}" | jq -r ".[] | select(.ssh_url_to_repo == \"${GITLAB_REPOSITORY_URL}\") | .id")
+    export GITLAB_STATE_URL="https://git.vshn.net/api/v4/projects/${GITLAB_CATALOG_PROJECT_ID}/terraform/state/cluster"
 
     pushd catalog/manifests/openshift4-terraform/
-
+    
     terraform init \
-      "-backend-config=address=${gitlab_state_url}" \
-      "-backend-config=lock_address=${gitlab_state_url}/lock" \
-      "-backend-config=unlock_address=${gitlab_state_url}/lock" \
-      "-backend-config=username=${INPUT_gitlab_user_name}" \
-      "-backend-config=password=${INPUT_gitlab_api_token}" \
+      "-backend-config=address=${GITLAB_STATE_URL}" \
+      "-backend-config=lock_address=${GITLAB_STATE_URL}/lock" \
+      "-backend-config=unlock_address=${GITLAB_STATE_URL}/lock" \
+      "-backend-config=username=${GITLAB_USER}" \
+      "-backend-config=password=${GITLAB_TOKEN}" \
       "-backend-config=lock_method=POST" \
       "-backend-config=unlock_method=DELETE" \
       "-backend-config=retry_wait_min=5"
@@ -396,8 +590,22 @@ steps:
     cat > override.tf <<EOF
     module "cluster" {
       bootstrap_count          = 0
+      lb_count                 = 0
       master_count             = 0
       infra_count              = 0
+      storage_count            = 0
+      worker_count             = 0
+      additional_worker_groups = {}
+    }
+    EOF
+    terraform apply -auto-approve
+
+    cat > override.tf <<EOF
+    module "cluster" {
+      bootstrap_count          = 0
+      master_count             = 0
+      infra_count              = 0
+      storage_count            = 0
       worker_count             = 0
       additional_worker_groups = {}
     }
@@ -470,10 +678,15 @@ steps:
 
 - match: And I provision the bootstrap node
   description: |-
-    This step provisions the bootstrap node for the Cloudscale OpenShift cluster using Terraform.
+    This step provisions the bootstrap node for the Exoscale OpenShift cluster using Terraform.
+
+    First, check the "Server created" tickets for the LBs and link them to the cluster setup ticket:
+    https://ticket.vshn.net/issues/?jql=project%20%3D%20APPU%20AND%20status%20%3D%20New%20AND%20text%20~%20%22server%20created%22
+
+    Then, press enter to continue
   inputs:
-  - name: cloudscale_token
-  - name: cloudscale_token_floaty
+  - name: exoscale_key
+  - name: exoscale_secret
   - name: control_vshn_api_token
   - name: ignition_bootstrap
   - name: hieradata_repo_token
@@ -488,19 +701,22 @@ steps:
   run: |
     set -euo pipefail
 
-    export COMMODORE_API_URL="${INPUT_commodore_api_url}"
     installer_dir="$(pwd)/target"
+    export COMMODORE_API_URL="${INPUT_commodore_api_url}"
+    export CLUSTER_ID="${INPUT_commodore_cluster_id}"
+    export GITLAB_TOKEN="${INPUT_gitlab_api_token}"
+    export GITLAB_USER="${INPUT_gitlab_user_name}"
 
     cat <<EOF > ./terraform.env
-    CLOUDSCALE_API_TOKEN=${INPUT_cloudscale_token}
-    TF_VAR_ignition_bootstrap=${INPUT_ignition_bootstrap}
-    TF_VAR_lb_cloudscale_api_secret=${INPUT_cloudscale_token_floaty}
-    TF_VAR_control_vshn_net_token=${INPUT_control_vshn_api_token}
+    EXOSCALE_API_KEY="${INPUT_exoscale_key}"
+    EXOSCALE_API_SECRET="${INPUT_exoscale_secret}"
+    TF_VAR_control_vshn_net_token="${INPUT_control_vshn_api_token}"
     GIT_AUTHOR_NAME=$(git config --global user.name)
     GIT_AUTHOR_EMAIL=$(git config --global user.email)
-    HIERADATA_REPO_TOKEN=${INPUT_hieradata_repo_token}
+    HIERADATA_REPO_TOKEN="${INPUT_hieradata_repo_token}"
     EOF
 
+    # Set terraform image and tag to be used
     tf_image=$(\
       yq eval ".parameters.openshift4_terraform.images.terraform.image" \
       dependencies/openshift4-terraform/class/defaults.yml)
@@ -508,24 +724,23 @@ steps:
       yq eval ".parameters.openshift4_terraform.images.terraform.tag" \
       dependencies/openshift4-terraform/class/defaults.yml)
 
-    echo "Using Terraform image: ${tf_image}:${tf_tag}"
-
+    # Generate the terraform alias
     base_dir=$(pwd)
     alias terraform='touch .terraformrc; docker run --rm -e REAL_UID=$(id -u) -e TF_CLI_CONFIG_FILE=/tf/.terraformrc --env-file ${base_dir}/terraform.env -w /tf -v $(pwd):/tf --ulimit memlock=-1 "${tf_image}:${tf_tag}" /tf/terraform.sh'
 
-    gitlab_repository_url=$(curl -sH "Authorization: Bearer $(commodore fetch-token)" ${INPUT_commodore_api_url}/clusters/${INPUT_commodore_cluster_id} | jq -r '.gitRepo.url' | sed 's|ssh://||; s|/|:|')
-    gitlab_repository_name=${gitlab_repository_url##*/}
-    gitlab_catalog_project_id=$(curl -sH "Authorization: Bearer ${INPUT_gitlab_api_token}" "https://git.vshn.net/api/v4/projects?simple=true&search=${gitlab_repository_name/.git}" | jq -r ".[] | select(.ssh_url_to_repo == \"${gitlab_repository_url}\") | .id")
-    gitlab_state_url="https://git.vshn.net/api/v4/projects/${gitlab_catalog_project_id}/terraform/state/cluster"
+    export GITLAB_REPOSITORY_URL=$(curl -sH "Authorization: Bearer $(commodore fetch-token)" ${COMMODORE_API_URL}/clusters/${CLUSTER_ID} | jq -r '.gitRepo.url' | sed 's|ssh://||; s|/|:|')
+    export GITLAB_REPOSITORY_NAME=${GITLAB_REPOSITORY_URL##*/}
+    export GITLAB_CATALOG_PROJECT_ID=$(curl -sH "Authorization: Bearer ${GITLAB_TOKEN}" "https://git.vshn.net/api/v4/projects?simple=true&search=${GITLAB_REPOSITORY_NAME/.git}" | jq -r ".[] | select(.ssh_url_to_repo == \"${GITLAB_REPOSITORY_URL}\") | .id")
+    export GITLAB_STATE_URL="https://git.vshn.net/api/v4/projects/${GITLAB_CATALOG_PROJECT_ID}/terraform/state/cluster"
 
     pushd catalog/manifests/openshift4-terraform/
-
+    
     terraform init \
-      "-backend-config=address=${gitlab_state_url}" \
-      "-backend-config=lock_address=${gitlab_state_url}/lock" \
-      "-backend-config=unlock_address=${gitlab_state_url}/lock" \
-      "-backend-config=username=${INPUT_gitlab_user_name}" \
-      "-backend-config=password=${INPUT_gitlab_api_token}" \
+      "-backend-config=address=${GITLAB_STATE_URL}" \
+      "-backend-config=lock_address=${GITLAB_STATE_URL}/lock" \
+      "-backend-config=unlock_address=${GITLAB_STATE_URL}/lock" \
+      "-backend-config=username=${GITLAB_USER}" \
+      "-backend-config=password=${GITLAB_TOKEN}" \
       "-backend-config=lock_method=POST" \
       "-backend-config=unlock_method=DELETE" \
       "-backend-config=retry_wait_min=5"
@@ -535,6 +750,7 @@ steps:
       bootstrap_count          = 1
       master_count             = 0
       infra_count              = 0
+      storage_count            = 0
       worker_count             = 0
       additional_worker_groups = {}
     }
@@ -569,97 +785,12 @@ steps:
 
     env -i "kubeconfig_path=${installer_dir}/auth/kubeconfig" >> "$OUTPUT"
 
-- match: And I store the subnet ID and floating IP in the Syn hierarchy
-  description: |-
-    This step retrieves the subnet ID and ingress floating IP from Terraform and
-    stores them in the Syn hierarchy.
-  inputs:
-  - name: cloudscale_token
-  - name: cloudscale_token_floaty
-  - name: control_vshn_api_token
-  - name: ignition_bootstrap
-  - name: hieradata_repo_token
-  - name: gitlab_user_name
-  - name: gitlab_api_token
-  - name: commodore_cluster_id
-  - name: commodore_tenant_id
-  - name: commodore_api_url
-  - name: image_major
-  - name: image_minor
-  run: |
-    set -euo pipefail
-    export COMMODORE_API_URL="${INPUT_commodore_api_url}"
-
-    cat <<EOF > ./terraform.env
-    CLOUDSCALE_API_TOKEN=${INPUT_cloudscale_token}
-    TF_VAR_ignition_bootstrap=${INPUT_ignition_bootstrap}
-    TF_VAR_lb_cloudscale_api_secret=${INPUT_cloudscale_token_floaty}
-    TF_VAR_control_vshn_net_token=${INPUT_control_vshn_api_token}
-    GIT_AUTHOR_NAME=$(git config --global user.name)
-    GIT_AUTHOR_EMAIL=$(git config --global user.email)
-    HIERADATA_REPO_TOKEN=${INPUT_hieradata_repo_token}
-    EOF
-
-    tf_image=$(\
-      yq eval ".parameters.openshift4_terraform.images.terraform.image" \
-      dependencies/openshift4-terraform/class/defaults.yml)
-    tf_tag=$(\
-      yq eval ".parameters.openshift4_terraform.images.terraform.tag" \
-      dependencies/openshift4-terraform/class/defaults.yml)
-
-    echo "Using Terraform image: ${tf_image}:${tf_tag}"
-
-    base_dir=$(pwd)
-    alias terraform='touch .terraformrc; docker run --rm -e REAL_UID=$(id -u) -e TF_CLI_CONFIG_FILE=/tf/.terraformrc --env-file ${base_dir}/terraform.env -w /tf -v $(pwd):/tf --ulimit memlock=-1 "${tf_image}:${tf_tag}" /tf/terraform.sh'
-
-    gitlab_repository_url=$(curl -sH "Authorization: Bearer $(commodore fetch-token)" ${INPUT_commodore_api_url}/clusters/${INPUT_commodore_cluster_id} | jq -r '.gitRepo.url' | sed 's|ssh://||; s|/|:|')
-    gitlab_repository_name=${gitlab_repository_url##*/}
-    gitlab_catalog_project_id=$(curl -sH "Authorization: Bearer ${INPUT_gitlab_api_token}" "https://git.vshn.net/api/v4/projects?simple=true&search=${gitlab_repository_name/.git}" | jq -r ".[] | select(.ssh_url_to_repo == \"${gitlab_repository_url}\") | .id")
-    gitlab_state_url="https://git.vshn.net/api/v4/projects/${gitlab_catalog_project_id}/terraform/state/cluster"
-
-    pushd catalog/manifests/openshift4-terraform/
-
-    terraform init \
-      "-backend-config=address=${gitlab_state_url}" \
-      "-backend-config=lock_address=${gitlab_state_url}/lock" \
-      "-backend-config=unlock_address=${gitlab_state_url}/lock" \
-      "-backend-config=username=${INPUT_gitlab_user_name}" \
-      "-backend-config=password=${INPUT_gitlab_api_token}" \
-      "-backend-config=lock_method=POST" \
-      "-backend-config=unlock_method=DELETE" \
-      "-backend-config=retry_wait_min=5"
-
-    SUBNET_UUID="$(terraform output -raw subnet_uuid)"
-    INGRESS_FLOATING_IP="$(terraform output -raw router_vip)"
-    pushd ../../../inventory/classes/${INPUT_commodore_tenant_id}
-
-    yq eval -i '.parameters.openshift.cloudscale.subnet_uuid = "'"$SUBNET_UUID"'"' \
-      ${INPUT_commodore_cluster_id}.yml
-    yq eval -i '.parameters.openshift.cloudscale.ingress_floating_ip_v4 = "'"$INGRESS_FLOATING_IP"'"' \
-      ${INPUT_commodore_cluster_id}.yml
-
-    if not git diff-index --quiet HEAD
-    then
-      git commit -am "Configure cloudscale subnet UUID and ingress floating IP for ${INPUT_commodore_cluster_id}"
-      git push origin master
-    fi || true
-
-    popd
-    popd # yes, twice.
-
-    # Recompile the catalog
-    commodore catalog compile ${INPUT_commodore_cluster_id} --push \
-      --dynamic-fact kubernetesVersion.major=1 \
-      --dynamic-fact kubernetesVersion.minor="$((INPUT_image_minor+13))" \
-      --dynamic-fact openshiftVersion.Major=${INPUT_image_major} \
-      --dynamic-fact openshiftVersion.Minor=${INPUT_image_minor}
-
 - match: And I provision the control plane
   description: |-
     This step provisions the control plane nodes with Terraform.
   inputs:
-  - name: cloudscale_token
-  - name: cloudscale_token_floaty
+  - name: exoscale_key
+  - name: exoscale_secret
   - name: control_vshn_api_token
   - name: ignition_bootstrap
   - name: hieradata_repo_token
@@ -672,18 +803,22 @@ steps:
   run: |
     set -euo pipefail
 
+    installer_dir="$(pwd)/target"
     export COMMODORE_API_URL="${INPUT_commodore_api_url}"
+    export CLUSTER_ID="${INPUT_commodore_cluster_id}"
+    export GITLAB_TOKEN="${INPUT_gitlab_api_token}"
+    export GITLAB_USER="${INPUT_gitlab_user_name}"
 
     cat <<EOF > ./terraform.env
-    CLOUDSCALE_API_TOKEN=${INPUT_cloudscale_token}
-    TF_VAR_ignition_bootstrap=${INPUT_ignition_bootstrap}
-    TF_VAR_lb_cloudscale_api_secret=${INPUT_cloudscale_token_floaty}
-    TF_VAR_control_vshn_net_token=${INPUT_control_vshn_api_token}
+    EXOSCALE_API_KEY="${INPUT_exoscale_key}"
+    EXOSCALE_API_SECRET="${INPUT_exoscale_secret}"
+    TF_VAR_control_vshn_net_token="${INPUT_control_vshn_api_token}"
     GIT_AUTHOR_NAME=$(git config --global user.name)
     GIT_AUTHOR_EMAIL=$(git config --global user.email)
-    HIERADATA_REPO_TOKEN=${INPUT_hieradata_repo_token}
+    HIERADATA_REPO_TOKEN="${INPUT_hieradata_repo_token}"
     EOF
 
+    # Set terraform image and tag to be used
     tf_image=$(\
       yq eval ".parameters.openshift4_terraform.images.terraform.image" \
       dependencies/openshift4-terraform/class/defaults.yml)
@@ -691,24 +826,23 @@ steps:
       yq eval ".parameters.openshift4_terraform.images.terraform.tag" \
       dependencies/openshift4-terraform/class/defaults.yml)
 
-    echo "Using Terraform image: ${tf_image}:${tf_tag}"
-
+    # Generate the terraform alias
     base_dir=$(pwd)
     alias terraform='touch .terraformrc; docker run --rm -e REAL_UID=$(id -u) -e TF_CLI_CONFIG_FILE=/tf/.terraformrc --env-file ${base_dir}/terraform.env -w /tf -v $(pwd):/tf --ulimit memlock=-1 "${tf_image}:${tf_tag}" /tf/terraform.sh'
 
-    gitlab_repository_url=$(curl -sH "Authorization: Bearer $(commodore fetch-token)" ${INPUT_commodore_api_url}/clusters/${INPUT_commodore_cluster_id} | jq -r '.gitRepo.url' | sed 's|ssh://||; s|/|:|')
-    gitlab_repository_name=${gitlab_repository_url##*/}
-    gitlab_catalog_project_id=$(curl -sH "Authorization: Bearer ${INPUT_gitlab_api_token}" "https://git.vshn.net/api/v4/projects?simple=true&search=${gitlab_repository_name/.git}" | jq -r ".[] | select(.ssh_url_to_repo == \"${gitlab_repository_url}\") | .id")
-    gitlab_state_url="https://git.vshn.net/api/v4/projects/${gitlab_catalog_project_id}/terraform/state/cluster"
+    export GITLAB_REPOSITORY_URL=$(curl -sH "Authorization: Bearer $(commodore fetch-token)" ${COMMODORE_API_URL}/clusters/${CLUSTER_ID} | jq -r '.gitRepo.url' | sed 's|ssh://||; s|/|:|')
+    export GITLAB_REPOSITORY_NAME=${GITLAB_REPOSITORY_URL##*/}
+    export GITLAB_CATALOG_PROJECT_ID=$(curl -sH "Authorization: Bearer ${GITLAB_TOKEN}" "https://git.vshn.net/api/v4/projects?simple=true&search=${GITLAB_REPOSITORY_NAME/.git}" | jq -r ".[] | select(.ssh_url_to_repo == \"${GITLAB_REPOSITORY_URL}\") | .id")
+    export GITLAB_STATE_URL="https://git.vshn.net/api/v4/projects/${GITLAB_CATALOG_PROJECT_ID}/terraform/state/cluster"
 
     pushd catalog/manifests/openshift4-terraform/
-
+    
     terraform init \
-      "-backend-config=address=${gitlab_state_url}" \
-      "-backend-config=lock_address=${gitlab_state_url}/lock" \
-      "-backend-config=unlock_address=${gitlab_state_url}/lock" \
-      "-backend-config=username=${INPUT_gitlab_user_name}" \
-      "-backend-config=password=${INPUT_gitlab_api_token}" \
+      "-backend-config=address=${GITLAB_STATE_URL}" \
+      "-backend-config=lock_address=${GITLAB_STATE_URL}/lock" \
+      "-backend-config=unlock_address=${GITLAB_STATE_URL}/lock" \
+      "-backend-config=username=${GITLAB_USER}" \
+      "-backend-config=password=${GITLAB_TOKEN}" \
       "-backend-config=lock_method=POST" \
       "-backend-config=unlock_method=DELETE" \
       "-backend-config=retry_wait_min=5"
@@ -717,6 +851,7 @@ steps:
     module "cluster" {
       bootstrap_count          = 1
       infra_count              = 0
+      storage_count            = 0
       worker_count             = 0
       additional_worker_groups = {}
     }
@@ -725,24 +860,6 @@ steps:
     echo "Running Terraform ..."
 
     terraform apply -auto-approve
-    dnstmp=$(mktemp)
-    terraform output -raw cluster_dns > "$dnstmp"
-    echo "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@"
-    echo "@                                                                                       @"
-    echo "@  Please add the etcd DNS records shown in the Terraform output to your DNS provider.  @"
-    echo "@  Most probably in https://git.vshn.net/vshn/vshn_zonefiles                            @"
-    echo "@                                                                                       @"
-    echo "@  If terminal selection does not work the entries can also be copied from              @"
-    echo "@    $dnstmp                                                                            @"
-    echo "@                                                                                       @"
-    echo "@  Waiting for record to propagate...                                                   @"
-    echo "@                                                                                       @"
-    echo "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@"
-    while ! (host "etcd-0.${INPUT_cluster_domain}")
-    do
-      sleep 15
-    done
-    rm -f "$dnstmp"
 
     export KUBECONFIG="${INPUT_kubeconfig_path}"
 
@@ -762,6 +879,8 @@ steps:
   - name: kubeconfig_path
   run: |
     set -euo pipefail
+    
+    installer_dir="$(pwd)/target"
     export COMMODORE_API_URL="${INPUT_commodore_api_url}"
     export KUBECONFIG="${INPUT_kubeconfig_path}"
 
@@ -778,48 +897,13 @@ steps:
       -p '{"spec":{"template":{"spec":{"tolerations":[{"operator":"Exists"}]}}}}'
     echo '# Applied cert-manager. #'
     echo
-    echo '# Applying machine-api-provider ... #'
-    VAULT_TOKEN=$(vault token lookup -format=json | jq -r .data.id)
-    export VAULT_TOKEN
-    kapitan refs --reveal --refs-path catalog/refs -f catalog/manifests/machine-api-provider-cloudscale/00_secrets.yaml | kubectl apply -f -
-    kubectl apply -f catalog/manifests/machine-api-provider-cloudscale/10_clusterRoleBinding.yaml
-    kubectl apply -f catalog/manifests/machine-api-provider-cloudscale/10_serviceAccount.yaml
-    kubectl apply -f catalog/manifests/machine-api-provider-cloudscale/11_deployment.yaml
-    echo '# Applied machine-api-provider. #'
-    echo
-    echo '# Applying machinesets ... #'
-    for f in catalog/manifests/openshift4-nodes/machineset-*.yaml;
-      do kubectl apply -f "$f";
-    done
-    echo '# Applied machinesets. #'
-    echo
-    echo '# Applying loadbalancer controller ... #'
-    kubectl apply -f catalog/manifests/cloudscale-loadbalancer-controller/00_namespace.yaml
-    kapitan refs --reveal --refs-path catalog/refs -f catalog/manifests/cloudscale-loadbalancer-controller/10_secrets.yaml | kubectl apply -f -
 
-    # TODO(aa): This fails on the first attempt because likely some of the previous resources need time to come online; figure out what to wait for
-    until kubectl apply -Rf catalog/manifests/cloudscale-loadbalancer-controller/10_kustomize
-    do
-      echo "Manifests didn't apply, waiting a moment to try again ..."
-      sleep 20
-    done
-    echo "Waiting for load balancer to become available ..."
-    kubectl -n appuio-cloudscale-loadbalancer-controller \
-      wait --for condition=available --timeout 3m \
-      deploy cloudscale-loadbalancer-controller-controller-manager
-    echo '# Applied loadbalancer controller. #'
-    echo
-    echo '# Applying ingress loadbalancer ... #'
-    kubectl apply -f catalog/manifests/cloudscale-loadbalancer-controller/20_loadbalancers.yaml
-    echo '# Applied ingress loadbalancer. #'
-    echo
-
-- match: Then I remove the bootstrap node
+- match: Then I provision the remaining nodes
   description: |-
     After successful bootstrapping, this step removes the bootstrap node again.
   inputs:
-  - name: cloudscale_token
-  - name: cloudscale_token_floaty
+  - name: exoscale_key
+  - name: exoscale_secret
   - name: control_vshn_api_token
   - name: ignition_bootstrap
   - name: hieradata_repo_token
@@ -833,17 +917,20 @@ steps:
     set -euo pipefail
 
     export COMMODORE_API_URL="${INPUT_commodore_api_url}"
+    export CLUSTER_ID="${INPUT_commodore_cluster_id}"
+    export GITLAB_TOKEN="${INPUT_gitlab_api_token}"
+    export GITLAB_USER="${INPUT_gitlab_user_name}"
 
     cat <<EOF > ./terraform.env
-    CLOUDSCALE_API_TOKEN=${INPUT_cloudscale_token}
-    TF_VAR_ignition_bootstrap=${INPUT_ignition_bootstrap}
-    TF_VAR_lb_cloudscale_api_secret=${INPUT_cloudscale_token_floaty}
-    TF_VAR_control_vshn_net_token=${INPUT_control_vshn_api_token}
+    EXOSCALE_API_KEY="${INPUT_exoscale_key}"
+    EXOSCALE_API_SECRET="${INPUT_exoscale_secret}"
+    TF_VAR_control_vshn_net_token="${INPUT_control_vshn_api_token}"
     GIT_AUTHOR_NAME=$(git config --global user.name)
     GIT_AUTHOR_EMAIL=$(git config --global user.email)
-    HIERADATA_REPO_TOKEN=${INPUT_hieradata_repo_token}
+    HIERADATA_REPO_TOKEN="${INPUT_hieradata_repo_token}"
     EOF
 
+    # Set terraform image and tag to be used
     tf_image=$(\
       yq eval ".parameters.openshift4_terraform.images.terraform.image" \
       dependencies/openshift4-terraform/class/defaults.yml)
@@ -851,24 +938,23 @@ steps:
       yq eval ".parameters.openshift4_terraform.images.terraform.tag" \
       dependencies/openshift4-terraform/class/defaults.yml)
 
-    echo "Using Terraform image: ${tf_image}:${tf_tag}"
-
+    # Generate the terraform alias
     base_dir=$(pwd)
     alias terraform='touch .terraformrc; docker run --rm -e REAL_UID=$(id -u) -e TF_CLI_CONFIG_FILE=/tf/.terraformrc --env-file ${base_dir}/terraform.env -w /tf -v $(pwd):/tf --ulimit memlock=-1 "${tf_image}:${tf_tag}" /tf/terraform.sh'
 
-    gitlab_repository_url=$(curl -sH "Authorization: Bearer $(commodore fetch-token)" ${INPUT_commodore_api_url}/clusters/${INPUT_commodore_cluster_id} | jq -r '.gitRepo.url' | sed 's|ssh://||; s|/|:|')
-    gitlab_repository_name=${gitlab_repository_url##*/}
-    gitlab_catalog_project_id=$(curl -sH "Authorization: Bearer ${INPUT_gitlab_api_token}" "https://git.vshn.net/api/v4/projects?simple=true&search=${gitlab_repository_name/.git}" | jq -r ".[] | select(.ssh_url_to_repo == \"${gitlab_repository_url}\") | .id")
-    gitlab_state_url="https://git.vshn.net/api/v4/projects/${gitlab_catalog_project_id}/terraform/state/cluster"
+    export GITLAB_REPOSITORY_URL=$(curl -sH "Authorization: Bearer $(commodore fetch-token)" ${COMMODORE_API_URL}/clusters/${CLUSTER_ID} | jq -r '.gitRepo.url' | sed 's|ssh://||; s|/|:|')
+    export GITLAB_REPOSITORY_NAME=${GITLAB_REPOSITORY_URL##*/}
+    export GITLAB_CATALOG_PROJECT_ID=$(curl -sH "Authorization: Bearer ${GITLAB_TOKEN}" "https://git.vshn.net/api/v4/projects?simple=true&search=${GITLAB_REPOSITORY_NAME/.git}" | jq -r ".[] | select(.ssh_url_to_repo == \"${GITLAB_REPOSITORY_URL}\") | .id")
+    export GITLAB_STATE_URL="https://git.vshn.net/api/v4/projects/${GITLAB_CATALOG_PROJECT_ID}/terraform/state/cluster"
 
     pushd catalog/manifests/openshift4-terraform/
-
+    
     terraform init \
-      "-backend-config=address=${gitlab_state_url}" \
-      "-backend-config=lock_address=${gitlab_state_url}/lock" \
-      "-backend-config=unlock_address=${gitlab_state_url}/lock" \
-      "-backend-config=username=${INPUT_gitlab_user_name}" \
-      "-backend-config=password=${INPUT_gitlab_api_token}" \
+      "-backend-config=address=${GITLAB_STATE_URL}" \
+      "-backend-config=lock_address=${GITLAB_STATE_URL}/lock" \
+      "-backend-config=unlock_address=${GITLAB_STATE_URL}/lock" \
+      "-backend-config=username=${GITLAB_USER}" \
+      "-backend-config=password=${GITLAB_TOKEN}" \
       "-backend-config=lock_method=POST" \
       "-backend-config=unlock_method=DELETE" \
       "-backend-config=retry_wait_min=5"
@@ -897,6 +983,37 @@ steps:
 
     popd
 
+- match: And I approve and label the new nodes
+  description: |-
+    This step approves the new nodes that joined the cluster after provisioning and adds the "ready" label to them.
+  inputs:
+  - name: kubeconfig_path
+  run: |
+    set -euo pipefail
+    export KUBECONFIG="${INPUT_kubeconfig_path}"
+
+    echo "Approving node certs..."
+    oc get csr -o go-template='{{range .items}}{{if not .status}}{{.metadata.name}}{{"\n"}}{{end}}{{end}}' | xargs oc adm certificate approve
+
+    echo "Label infra nodes..."
+    kubectl get node -ojson | \
+      jq -r '.items[] | select(.metadata.name | test("infra-")).metadata.name' | \
+      xargs -I {} kubectl label node {} node-role.kubernetes.io/infra=
+
+    echo "Label and taint storage nodes..."
+    kubectl get node -ojson | \
+      jq -r '.items[] | select(.metadata.name | test("storage-")).metadata.name' | \
+      xargs -I {} kubectl  label node {} node-role.kubernetes.io/storage=
+
+    kubectl taint node -lnode-role.kubernetes.io/storage storagenode=True:NoSchedule
+
+    echo "Label worker nodes..."
+    kubectl get node -ojson | \
+      jq -r '.items[] | select(.metadata.name | test("infra|master|storage-")|not).metadata.name' | \
+      xargs -I {} kubectl label node {} node-role.kubernetes.io/app=
+
+    echo "✅ All new nodes approved and labeled successfully."
+
 - match: And I configure initial deployments
   description: |-
     This step configures some deployments that require manual changes after
@@ -909,6 +1026,7 @@ steps:
   - name: kubeconfig_path
   run: |
     set -euo pipefail
+
     export COMMODORE_API_URL="${INPUT_commodore_api_url}"
     export KUBECONFIG="${INPUT_kubeconfig_path}"
 
@@ -943,3 +1061,24 @@ steps:
       $(kubectl -n syn-cert-manager get deploy -oname) \
       -p '[{"op":"remove","path":"/spec/template/spec/tolerations"}]'
     echo '# Removed temporary cert-manager tolerations. #'
+
+    echo "✅ Initial deployments configured successfully."
+
+- match: Then I create the registry S3 secret
+  description: |-
+    This step creates a secret with the S3 credentials for the internal registry.
+  inputs:
+  - name: kubeconfig_path
+  - name: s3_access_key
+  - name: s3_secret_key
+  run: |
+    set -euo pipefail
+
+    export KUBECONFIG="${INPUT_kubeconfig_path}"
+
+    oc create secret generic image-registry-private-configuration-user \
+      --namespace openshift-image-registry \
+      --from-literal=REGISTRY_STORAGE_S3_ACCESSKEY=${INPUT_s3_access_key} \
+      --from-literal=REGISTRY_STORAGE_S3_SECRETKEY=${INPUT_s3_secret_key}
+
+    echo "✅ Registry S3 secret created successfully."
