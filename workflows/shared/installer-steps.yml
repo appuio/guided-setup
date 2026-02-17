@@ -1,0 +1,33 @@
+steps:
+- match: And I download the `openshift-install` binary for version "(?P<ocp_version>[^"]+)"
+  description: |-
+    This step downloads the `openshift-install` binary for the specified OpenShift version.
+  outputs:
+  - name: openshift_install_bin
+
+  run: |
+    set -euo pipefail
+
+    shopt -s expand_aliases
+    if [[ -f openshift-install ]]
+    then
+      alias openshift-install='./openshift-install'
+      echo "Found existing openshift-install binary, checking version ..."
+      INSTALLED_VERSION=$(openshift-install version | grep 'openshift-install' | awk '{print $2}' | sed 's/^v//' | sed -E 's/\.[0-9]{1,2}$//')
+      if [ "$INSTALLED_VERSION" = "$MATCH_ocp_version" ]; then
+        echo "✅ openshift-install version ${MATCH_ocp_version}.XX is present."
+        env -i "openshift_install_bin=$( pwd )/openshift-install" >> "$OUTPUT"
+        exit 0
+      else
+        echo "❌ openshift-install version $INSTALLED_VERSION is present, but version $MATCH_ocp_version is required."
+        rm openshift-install
+        exit 1
+      fi
+    fi
+
+    rm -f openshift-install-linux.tar.gz
+    echo "Downloading openshift-install for version ${MATCH_ocp_version} ..."
+    curl -O https://mirror.openshift.com/pub/openshift-v4/clients/ocp/stable-${MATCH_ocp_version}/openshift-install-linux.tar.gz
+    tar -xf openshift-install-linux.tar.gz 
+
+    env -i "openshift_install_bin=$( pwd )/openshift-install" >> "$OUTPUT"

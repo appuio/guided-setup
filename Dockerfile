@@ -70,7 +70,7 @@ RUN go install github.com/mikefarah/yq/v4@latest && cp ${HOME}/go/bin/yq /usr/lo
 # glab
 # renovate: datasource=gitlab-releases depName=gitlab-org/cli registryUrl=https://gitlab.com
 ARG GLAB_VERSION=v1.85.2
-RUN 
+RUN \
   cd /tmp && \
   wget https://gitlab.com/gitlab-org/cli/-/releases/${GLAB_VERSION}/downloads/glab_${GLAB_VERSION##v}_linux_amd64.deb && \
   dpkg -i /tmp/glab_${GLAB_VERSION##v}_linux_amd64.deb && \
