@@ -152,7 +152,7 @@ RUN chmod a+x /usr/local/bin/xdg-open
 
 # Gandalf
 # renovate: datasource=github-releases depName=appuio/gandalf
-ARG GANDALF_VERSION=v0.0.3
+ARG GANDALF_VERSION=v0.0.4
 RUN GOEXPERIMENT=jsonv2 go install github.com/appuio/gandalf@${GANDALF_VERSION} && cp ${HOME}/go/bin/gandalf /usr/local/bin/
 
 # OIDC token callback for Commodore
