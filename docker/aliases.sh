@@ -1,10 +1,26 @@
+#!/bin/bash
 
-guided-setup-raw() {
+guided-setup-base() {
+
+local OPTIND opt extra_volume
+extra_volume=()
+while getopts 'h?v:' opt; do
+    case "$opt" in
+    h|\?)
+        echo "usage: $0 [-y] [-v EXTRA_VOLUME_MOUNT]"
+        ;;
+    v)
+        extra_volume=(--volume "$OPTARG")
+        ;;
+    esac
+done
+shift $((OPTIND-1))
+
   local pubring="${HOME}/.gnupg/pubring.kbx"
   if command -v gpgconf &>/dev/null && test -f "${pubring}"; then
     gpg_opts=(--volume "${pubring}:/app/.gnupg/pubring.kbx:ro" --volume "$(gpgconf --list-dir agent-extra-socket):/app/.gnupg/S.gpg-agent:ro")
   else
-    gpg_opts=
+    gpg_opts=()
   fi
 
   if [[ "$OSTYPE" == "linux-gnu"* ]]; then
@@ -13,9 +29,9 @@ guided-setup-raw() {
       open="open"
   fi
 
-  rm -rf /run/user/$(id -u)/guided-setup-open-browser.sock
+  rm -rf "/run/user/$(id -u)/guided-setup-open-browser.sock"
   socat \
-    unix-listen:/run/user/$(id -u)/guided-setup-open-browser.sock,fork \
+    "unix-listen:/run/user/$(id -u)/guided-setup-open-browser.sock,fork" \
     system:"xargs $open" &
 
   # NOTE(aa): Host network is required for the Vault OIDC callback, since Vault only binds the callback handler to 127.0.0.1
@@ -34,16 +50,37 @@ guided-setup-raw() {
     --volume "${HOME}/.cache:/app/.cache" \
     --volume "${HOME}/.gandalf:/app/.gandalf" \
     --volume "/run/user/$(id -u)/guided-setup-open-browser.sock:/run/user/$(id -u)/guided-setup-open-browser.sock" \
-    ${gpg_opts[@]} \
+    "${extra_volume[@]}" \
+    "${gpg_opts[@]}" \
     --volume "${PWD}:${PWD}" \
     --workdir "${PWD}" \
-    2731be73adfe \
-    gandalf ${@}
+    ghcr.io/appuio/guided-setup:latest  \
+    "${@}"
   
+  # shellcheck disable=2046
   kill $(jobs -p)
-  rm -rf /run/user/$(id -u)/guided-setup-open-browser.sock
+  rm -rf "/run/user/$(id -u)/guided-setup-open-browser.sock"
 }
 
 guided-setup() {
-  guided-setup-raw run /workflows/${1}.workflow /workflows/${1}/*.yml /workflows/shared/*.yml "${@:2}"
+local OPTIND opt workflow_dir
+workflow_dir=
+  while getopts 'h?w:' opt; do
+      case "$opt" in
+      h|\?)
+          echo "usage: $0 [-y] [-w LOCAL_WORKFLOW_DIR]"
+          ;;
+      w)
+          workflow_dir="$OPTARG"
+          ;;
+      esac
+  done
+  shift $((OPTIND-1))
+
+  if [[ -z $workflow_dir ]]
+  then
+    guided-setup-base "${1}" "/workflows/${2}.workflow" "/workflows/${2}"/*.yml /workflows/shared/*.yml "${@:3}"
+  else
+    guided-setup-base -v "$workflow_dir":/workflows "${1}" "/workflows/${2}.workflow" "/workflows/${2}"/*.yml /workflows/shared/*.yml "${@:3}"
+  fi
 }

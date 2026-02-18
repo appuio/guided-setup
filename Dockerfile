@@ -1,15 +1,13 @@
-FROM docker.io/golang:1.26.0 AS golang
+ARG TARGETPLATFORM
+ARG TARGETARCH
 
-FROM ghcr.io/appuio/gandalf:v0.0.3 AS gandalf
+FROM projectsyn/commodore:v1.32.0 AS base
 
-FROM projectsyn/commodore:v1.31.0 AS base
+ENV TARGETARCH=${TARGETARCH:-amd64}
 
 USER 0:0
 
 ENV PATH=${PATH}:${HOME}/.local/bin:/usr/local/go/bin
-
-COPY --from=golang /usr/local/go /usr/local/go
-COPY --from=gandalf /usr/bin/gandalf /usr/bin/gandalf
 
 RUN \
   apt-get -y update && \
@@ -34,6 +32,15 @@ RUN \
     socat \
     unzip \
     wget
+
+# renovate: datasource=golang-version depName=golang
+ARG GO_VERSION=1.26.0
+RUN \
+  cd /tmp && \
+  wget https://go.dev/dl/go${GO_VERSION}.linux-${TARGETARCH}.tar.gz && \
+  tar -C /usr/local -xzf go${GO_VERSION}.linux-${TARGETARCH}.tar.gz && \
+  rm -f /tmp/go${GO_VERSION}.linux-${TARGETARCH}.tar.gz
+
 
 RUN echo "    ControlMaster auto\n    ControlPath /tmp/%r@%h:%p" >> /etc/ssh/ssh_config
 
@@ -65,27 +72,29 @@ RUN \
       kubectl
 
 # mikefarah/yq
-RUN go install github.com/mikefarah/yq/v4@latest && cp ${HOME}/go/bin/yq /usr/local/bin/
+# renovate: datasource=github-releases depName=mikefarah/yq
+ARG YQ_VERSION=v4.52.4
+RUN go install github.com/mikefarah/yq/${YQ_VERSION%%.*}@${YQ_VERSION} && cp ${HOME}/go/bin/yq /usr/local/bin/
 
 # glab
 # renovate: datasource=gitlab-releases depName=gitlab-org/cli registryUrl=https://gitlab.com
 ARG GLAB_VERSION=v1.85.2
 RUN \
   cd /tmp && \
-  wget https://gitlab.com/gitlab-org/cli/-/releases/${GLAB_VERSION}/downloads/glab_${GLAB_VERSION##v}_linux_amd64.deb && \
-  dpkg -i /tmp/glab_${GLAB_VERSION##v}_linux_amd64.deb && \
-  rm -f /tmp/glab_${GLAB_VERSION##v}_linux_amd64.deb
+  wget https://gitlab.com/gitlab-org/cli/-/releases/${GLAB_VERSION}/downloads/glab_${GLAB_VERSION##v}_linux_${TARGETARCH}.deb && \
+  dpkg -i /tmp/glab_${GLAB_VERSION##v}_linux_${TARGETARCH}.deb && \
+  rm -f /tmp/glab_${GLAB_VERSION##v}_linux_${TARGETARCH}.deb
 
 # MinIO CLI
 # renovate: datasource=custom.minio depName=mcli
 ARG MINIO_VERSION=20250813083541.0.0
 RUN \
   cd /tmp && \
-  wget https://dl.min.io/client/mc/release/linux-amd64/mcli_${MINIO_VERSION}_amd64.deb && \
-  wget https://dl.min.io/client/mc/release/linux-amd64/mcli_${MINIO_VERSION}_amd64.deb.sha256sum && \
-  grep mcli_${MINIO_VERSION}_amd64.deb mcli_${MINIO_VERSION}_amd64.deb.sha256sum | sha256sum -c && \
-  dpkg -i /tmp/mcli_${MINIO_VERSION}_amd64.deb && \
-  rm -f /tmp/mcli_${MINIO_VERSION}_amd64.deb /tmp/mcli_${MINIO_VERSION}_amd64.deb.sha256sum  && \
+  wget https://dl.min.io/client/mc/release/linux-${TARGETARCH}/mcli_${MINIO_VERSION}_${TARGETARCH}.deb && \
+  wget https://dl.min.io/client/mc/release/linux-${TARGETARCH}/mcli_${MINIO_VERSION}_${TARGETARCH}.deb.sha256sum && \
+  grep mcli_${MINIO_VERSION}_${TARGETARCH}.deb mcli_${MINIO_VERSION}_${TARGETARCH}.deb.sha256sum | sha256sum -c && \
+  dpkg -i /tmp/mcli_${MINIO_VERSION}_${TARGETARCH}.deb && \
+  rm -f /tmp/mcli_${MINIO_VERSION}_${TARGETARCH}.deb /tmp/mcli_${MINIO_VERSION}_${TARGETARCH}.deb.sha256sum  && \
   ln -s /usr/local/bin/mcli /usr/local/bin/mc
   
 
@@ -94,15 +103,15 @@ RUN \
 ARG VAULT_VERSION=v1.21.2
 RUN \
     cd /tmp && \
-    wget https://releases.hashicorp.com/vault/${VAULT_VERSION##v}/vault_${VAULT_VERSION##v}_linux_amd64.zip && \
+    wget https://releases.hashicorp.com/vault/${VAULT_VERSION##v}/vault_${VAULT_VERSION##v}_linux_${TARGETARCH}.zip && \
     wget https://releases.hashicorp.com/vault/${VAULT_VERSION##v}/vault_${VAULT_VERSION##v}_SHA256SUMS && \
     wget https://releases.hashicorp.com/vault/${VAULT_VERSION##v}/vault_${VAULT_VERSION##v}_SHA256SUMS.sig && \
     wget -qO- https://www.hashicorp.com/.well-known/pgp-key.txt | gpg --import && \
     gpg --verify vault_${VAULT_VERSION##v}_SHA256SUMS.sig vault_${VAULT_VERSION##v}_SHA256SUMS && \
-    grep vault_${VAULT_VERSION##v}_linux_amd64.zip vault_${VAULT_VERSION##v}_SHA256SUMS | sha256sum -c && \
-    unzip /tmp/vault_${VAULT_VERSION##v}_linux_amd64.zip -d /tmp && \
+    grep vault_${VAULT_VERSION##v}_linux_${TARGETARCH}.zip vault_${VAULT_VERSION##v}_SHA256SUMS | sha256sum -c && \
+    unzip /tmp/vault_${VAULT_VERSION##v}_linux_${TARGETARCH}.zip -d /tmp && \
     mv /tmp/vault /usr/local/bin/vault && \
-    rm -f /tmp/vault_${VAULT_VERSION##v}_linux_amd64.zip vault_${VAULT_VERSION##v}_SHA256SUMS ${VAULT_VERSION##v}/vault_${VAULT_VERSION##v}_SHA256SUMS.sig
+    rm -f /tmp/vault_${VAULT_VERSION##v}_linux_${TARGETARCH}.zip vault_${VAULT_VERSION##v}_SHA256SUMS ${VAULT_VERSION##v}/vault_${VAULT_VERSION##v}_SHA256SUMS.sig
 
 # OC
 # renovate: datasource=custom.oc depName=openshift-client
@@ -118,28 +127,33 @@ RUN cd /tmp && \
 # renovate: datasource=github-releases depName=vshn/emergency-credentials-receive
 ARG ECR_VERSION=v1.2.2
 RUN cd /tmp && \
-    wget https://github.com/vshn/emergency-credentials-receive/releases/download/${ECR_VERSION}/emergency-credentials-receive_linux_amd64 && \
-    chmod a+x /tmp/emergency-credentials-receive_linux_amd64 && \
-    mv /tmp/emergency-credentials-receive_linux_amd64 /usr/local/bin/emergency-credentials-receive && \
-    rm -f /tmp/emergency-credentials-receive_linux_amd64
+    wget https://github.com/vshn/emergency-credentials-receive/releases/download/${ECR_VERSION}/emergency-credentials-receive_linux_${TARGETARCH} && \
+    chmod a+x /tmp/emergency-credentials-receive_linux_${TARGETARCH} && \
+    mv /tmp/emergency-credentials-receive_linux_${TARGETARCH} /usr/local/bin/emergency-credentials-receive && \
+    rm -f /tmp/emergency-credentials-receive_linux_${TARGETARCH}
 
 # Exo CLI
 # renovate: datasource=github-releases depName=exoscale/cli
 ARG EXO_VERSION=v1.93.0
 RUN cd /tmp && \
-    wget https://github.com/exoscale/cli/releases/download/${EXO_VERSION}/exoscale-cli_${EXO_VERSION##v}_linux_amd64.deb && \
-    wget https://github.com/exoscale/cli/releases/download/${EXO_VERSION}/exoscale-cli_${EXO_VERSION##v}_linux_amd64.deb.sig && \
+    wget https://github.com/exoscale/cli/releases/download/${EXO_VERSION}/exoscale-cli_${EXO_VERSION##v}_linux_${TARGETARCH}.deb && \
+    wget https://github.com/exoscale/cli/releases/download/${EXO_VERSION}/exoscale-cli_${EXO_VERSION##v}_linux_${TARGETARCH}.deb.sig && \
     wget https://github.com/exoscale/cli/releases/download/${EXO_VERSION}/exoscale-cli_${EXO_VERSION##v}_checksums.txt && \
     wget https://github.com/exoscale/cli/releases/download/${EXO_VERSION}/exoscale-cli_${EXO_VERSION##v}_checksums.txt.sig && \
     gpg --keyserver hkps://keys.openpgp.org:443 --recv-keys "7100E8BFD6199CE0374CB7F003686F8CDE378D41" && \
     gpg --verify exoscale-cli_${EXO_VERSION##v}_checksums.txt.sig exoscale-cli_${EXO_VERSION##v}_checksums.txt && \
-    gpg --verify exoscale-cli_${EXO_VERSION##v}_linux_amd64.deb.sig exoscale-cli_${EXO_VERSION##v}_linux_amd64.deb && \
-    grep  exoscale-cli_${EXO_VERSION##v}_linux_amd64.deb exoscale-cli_${EXO_VERSION##v}_checksums.txt | sha256sum -c && \
-    dpkg -i /tmp/exoscale-cli_${EXO_VERSION##v}_linux_amd64.deb && \
+    gpg --verify exoscale-cli_${EXO_VERSION##v}_linux_${TARGETARCH}.deb.sig exoscale-cli_${EXO_VERSION##v}_linux_${TARGETARCH}.deb && \
+    grep  exoscale-cli_${EXO_VERSION##v}_linux_${TARGETARCH}.deb exoscale-cli_${EXO_VERSION##v}_checksums.txt | sha256sum -c && \
+    dpkg -i /tmp/exoscale-cli_${EXO_VERSION##v}_linux_${TARGETARCH}.deb && \
     rm -f /tmp/exoscale-cli_${EXO_VERSION##v}_*
 
 COPY ./docker/browser.sh /usr/local/bin/xdg-open
 RUN chmod a+x /usr/local/bin/xdg-open
+
+# Gandalf
+# renovate: datasource=github-releases depName=appuio/gandalf
+ARG GANDALF_VERSION=v0.0.3
+RUN GOEXPERIMENT=jsonv2 go install github.com/appuio/gandalf@${GANDALF_VERSION} && cp ${HOME}/go/bin/gandalf /usr/local/bin/
 
 # OIDC token callback for Commodore
 EXPOSE 18000
@@ -148,5 +162,7 @@ EXPOSE 8250
 
 
 COPY ./workflows /workflows
+
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh", "gandalf"]
 
 USER 65536:0
