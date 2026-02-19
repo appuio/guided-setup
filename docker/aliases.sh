@@ -79,8 +79,8 @@ workflow_dir=
 
   if [[ -z $workflow_dir ]]
   then
-    guided-setup-base "${1}" "/workflows/${2}.workflow" "/workflows/${2}"/*.yml /workflows/shared/*.yml "${@:3}"
+    guided-setup-base "${1}" "/workflows/${2}.workflow" "/workflows/${2}/*.yml" "/workflows/shared/*.yml" "${@:3}"
   else
-    guided-setup-base -v "$workflow_dir":/workflows "${1}" "/workflows/${2}.workflow" "/workflows/${2}"/*.yml /workflows/shared/*.yml "${@:3}"
+    guided-setup-base -v "$workflow_dir":/workflows "${1}" "/workflows/${2}.workflow" "/workflows/${2}/*.yml" "/workflows/shared/*.yml" "${@:3}"
   fi
 }
