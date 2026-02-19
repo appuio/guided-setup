@@ -1,7 +1,7 @@
 ARG TARGETPLATFORM
 ARG TARGETARCH
 
-FROM projectsyn/commodore:v1.32.0 AS base
+FROM ghcr.io/projectsyn/commodore:fix-docker-build AS base
 
 ENV TARGETARCH=${TARGETARCH:-amd64}
 
@@ -149,6 +149,7 @@ RUN cd /tmp && \
 
 COPY ./docker/browser.sh /usr/local/bin/xdg-open
 RUN chmod a+x /usr/local/bin/xdg-open
+ENV BROWSER=xdg-open
 
 # Gandalf
 # renovate: datasource=github-releases depName=appuio/gandalf

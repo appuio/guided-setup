@@ -29,9 +29,8 @@ shift $((OPTIND-1))
       open="open"
   fi
 
-  rm -rf "/run/user/$(id -u)/guided-setup-open-browser.sock"
   socat \
-    "unix-listen:/run/user/$(id -u)/guided-setup-open-browser.sock,fork" \
+    tcp-listen:8105,fork,reuseaddr,bind=127.0.0.1 \
     system:"xargs $open" &
 
   # NOTE(aa): Host network is required for the Vault OIDC callback, since Vault only binds the callback handler to 127.0.0.1
@@ -49,7 +48,6 @@ shift $((OPTIND-1))
     --volume "${HOME}/.gitconfig:/app/.gitconfig:ro" \
     --volume "${HOME}/.cache:/app/.cache" \
     --volume "${HOME}/.gandalf:/app/.gandalf" \
-    --volume "/run/user/$(id -u)/guided-setup-open-browser.sock:/run/user/$(id -u)/guided-setup-open-browser.sock" \
     "${extra_volume[@]}" \
     "${gpg_opts[@]}" \
     --volume "${PWD}:${PWD}" \
@@ -59,7 +57,6 @@ shift $((OPTIND-1))
   
   # shellcheck disable=2046
   kill $(jobs -p)
-  rm -rf "/run/user/$(id -u)/guided-setup-open-browser.sock"
 }
 
 guided-setup() {
