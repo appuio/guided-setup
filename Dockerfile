@@ -1,7 +1,7 @@
 ARG TARGETPLATFORM
 ARG TARGETARCH
 
-FROM ghcr.io/projectsyn/commodore:fix-docker-build AS base
+FROM projectsyn/commodore:v1.32.0 AS base
 
 ENV TARGETARCH=${TARGETARCH:-amd64}
 
