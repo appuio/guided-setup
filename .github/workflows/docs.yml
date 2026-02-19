@@ -27,7 +27,15 @@ jobs:
             basename=${wf##*/}
             stripext=${basename%%.*}
             cloud=${stripext%%-*}
+            echo "Generating workflow for $cloud ..."
             docker run --user $(id -u) --volume=$(pwd)/gs/workflows:/workflows ghcr.io/appuio/gandalf:latest render /workflows/"$basename" /workflows/"$cloud"/*.yml /workflows/shared/*.yml | sed -e 's/^=/==/' > docs/docs/modules/ROOT/partials/guided-setup/"$stripext".adoc
+            echo "Adding alias snippet ..."
+            cat > docs/docs/modules/ROOT/partials/guided-setup/guided-setup-alias.adoc <<EOF
+          [source,bash]
+          ----
+          $( cat gs/docker/aliases.sh | grep -v "#!" )
+          ----
+          EOF
           done
       - name: Commit and push changes (if any)
         if: ${{ github.event_name == 'push' }}
