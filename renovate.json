@@ -1,0 +1,66 @@
+{
+  "extends": [
+    "config:base",
+    ":gitSignOff",
+    ":disableDependencyDashboard"
+  ],
+  "labels": [
+    "dependency"
+  ],
+  "separateMinorPatch": true,
+  "customManagers": [
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/^Dockerfile$/"],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>.*?) depName=(?<depName>.*?)( versioning=(?<versioning>.*?))?( registryUrl=(?<registryUrl>.*?))?\\sARG .*?_VERSION=(?<currentValue>.*)\\s"
+      ],
+      "versioningTemplate": "{{#if versioning}}{{{versioning}}}{{else}}semver{{/if}}"
+    }
+  ],
+  "customDatasources": {
+    "oc": {
+      "defaultRegistryUrlTemplate": "https://mirror.openshift.com/pub/openshift-v4/x86_64/clients/ocp/",
+      "format": "html",
+      "transformTemplates": [
+        "{\"releases\": $filter([$map($.releases, function($v) {\r\n    {\"version\": $match($v.version, \/(\\d+\\.\\d+\\.\\d+)\\\/\/).groups[0]}\r\n})], function($v) { $v.version })}"
+      ]
+    }
+  },
+  "packageRules": [
+    {
+      "matchPackageNames": ["docker.io/minio/mc"],
+      "versioning": "regex:^RELEASE\\.(?<major>\\d{4})-(?<minor>\\d{2})-(?<patch>\\d{2})"
+    },
+    {
+      "matchUpdateTypes": [
+        "patch",
+        "digest"
+      ],
+      "matchCurrentVersion": "!/^v?0\\./",
+      "automerge": true,
+      "platformAutomerge": false,
+      "labels": [
+        "dependency",
+        "automerge",
+        "bump:patch"
+      ]
+    },
+    {
+      "matchDepNames": ["python"],
+      "enabled": false
+    },
+    {
+      "matchPackageNames": ["docker.io/python"],
+      "separateMajorMinor": true,
+      "separateMinorPatch": true,
+      "separateMultipleMajor": true,
+      "separateMultipleMinor": true,
+      "automerge": false
+    },
+    {
+      "matchPackageNames": ["openshift-client"],
+      "automerge": false
+    }
+  ]
+}
