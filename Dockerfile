@@ -64,7 +64,7 @@ RUN \
       kubectl
 
 # mikefarah/yq
-COPY --from=docker.io/mikefarah/yq:v4.52.4 /usr/bin/yq /usr/local/bin/yq
+COPY --from=docker.io/mikefarah/yq:4.52.4 /usr/bin/yq /usr/local/bin/yq
 
 # glab
 # renovate: datasource=gitlab-releases depName=gitlab-org/cli registryUrl=https://gitlab.com
@@ -131,7 +131,7 @@ RUN chmod a+x /usr/local/bin/xdg-open
 ENV BROWSER=xdg-open
 
 # Gandalf
-COPY --from=ghcr.io/appuio/gandalf:v0.0.4
+COPY --from=ghcr.io/appuio/gandalf:v0.0.4 \
     /usr/bin/gandalf /usr/local/bin/gandalf
 
 # OIDC token callback for Commodore
