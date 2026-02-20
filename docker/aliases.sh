@@ -1,20 +1,19 @@
 #!/bin/bash
 
 guided-setup-base() {
-
-local OPTIND opt extra_volume
-extra_volume=()
-while getopts 'h?v:' opt; do
-    case "$opt" in
-    h|\?)
-        echo "usage: $0 [-y] [-v EXTRA_VOLUME_MOUNT]"
-        ;;
-    v)
-        extra_volume=(--volume "$OPTARG")
-        ;;
-    esac
-done
-shift $((OPTIND-1))
+  local OPTIND opt extra_volume
+  extra_volume=()
+  while getopts 'h?v:' opt; do
+      case "$opt" in
+      h|\?)
+          echo "usage: $0 [-y] [-v EXTRA_VOLUME_MOUNT]"
+          ;;
+      v)
+          extra_volume=(--volume "$OPTARG")
+          ;;
+      esac
+  done
+  shift $((OPTIND-1))
 
   local pubring="${HOME}/.gnupg/pubring.kbx"
   if command -v gpgconf &>/dev/null && test -f "${pubring}"; then
@@ -59,8 +58,8 @@ shift $((OPTIND-1))
 }
 
 guided-setup() {
-local OPTIND opt workflow_dir
-workflow_dir=
+  local OPTIND opt workflow_dir
+  workflow_dir=
   while getopts 'h?w:' opt; do
       case "$opt" in
       h|\?)

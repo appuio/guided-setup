@@ -25,16 +25,13 @@
       "transformTemplates": [
         "{\"releases\": $filter([$map($.releases, function($v) {\r\n    {\"version\": $match($v.version, \/(\\d+\\.\\d+\\.\\d+)\\\/\/).groups[0]}\r\n})], function($v) { $v.version })}"
       ]
-    },
-    "minio": {
-      "defaultRegistryUrlTemplate": "https://dl.min.io/client/mc/release/linux-amd64/",
-      "format": "html",
-      "transformTemplates": [
-        "{\"releases\": [$filter([$map($.releases, function($v) {\r\n    {\"version\": $match($v.version, \/\\\/client\\\/mc\\\/release\\\/linux-amd64\\\/mcli_(.+)_amd64\\.deb$\/).groups[0]}\r\n})], function($v){ $v.version } )] }"
-      ]
     }
   },
   "packageRules": [
+    {
+      "matchPackageNames": ["docker.io/minio/mc"],
+      "versioning": "regex:^RELEASE\\.(?<major>\\d{4})-(?<minor>\\d{2})-(?<patch>\\d{2})"
+    },
     {
       "matchUpdateTypes": [
         "patch",

@@ -33,14 +33,6 @@ RUN \
     unzip \
     wget
 
-# renovate: datasource=golang-version depName=golang
-ARG GO_VERSION=1.26.0
-RUN \
-  cd /tmp && \
-  wget https://go.dev/dl/go${GO_VERSION}.linux-${TARGETARCH}.tar.gz && \
-  tar -C /usr/local -xzf go${GO_VERSION}.linux-${TARGETARCH}.tar.gz && \
-  rm -f /tmp/go${GO_VERSION}.linux-${TARGETARCH}.tar.gz
-
 
 RUN echo "    ControlMaster auto\n    ControlPath /tmp/%r@%h:%p" >> /etc/ssh/ssh_config
 
@@ -72,11 +64,8 @@ RUN \
       kubectl
 
 # mikefarah/yq
-# renovate: datasource=github-releases depName=mikefarah/yq
-ARG YQ_VERSION=v4.52.4
-RUN go install github.com/mikefarah/yq/${YQ_VERSION%%.*}@${YQ_VERSION} && cp ${HOME}/go/bin/yq /usr/local/bin/
-# mikefarah/yq
 COPY --from=docker.io/mikefarah/yq:v4.52.4 /usr/bin/yq /usr/local/bin/yq
+
 # glab
 # renovate: datasource=gitlab-releases depName=gitlab-org/cli registryUrl=https://gitlab.com
 ARG GLAB_VERSION=v1.85.2
