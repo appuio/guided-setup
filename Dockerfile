@@ -75,7 +75,8 @@ RUN \
 # renovate: datasource=github-releases depName=mikefarah/yq
 ARG YQ_VERSION=v4.52.4
 RUN go install github.com/mikefarah/yq/${YQ_VERSION%%.*}@${YQ_VERSION} && cp ${HOME}/go/bin/yq /usr/local/bin/
-
+# mikefarah/yq
+COPY --from=docker.io/mikefarah/yq:v4.52.4 /usr/bin/yq /usr/local/bin/yq
 # glab
 # renovate: datasource=gitlab-releases depName=gitlab-org/cli registryUrl=https://gitlab.com
 ARG GLAB_VERSION=v1.85.2
@@ -87,15 +88,8 @@ RUN \
 
 # MinIO CLI
 # renovate: datasource=custom.minio depName=mcli
-ARG MINIO_VERSION=20250813083541.0.0
-RUN \
-  cd /tmp && \
-  wget https://dl.min.io/client/mc/release/linux-${TARGETARCH}/mcli_${MINIO_VERSION}_${TARGETARCH}.deb && \
-  wget https://dl.min.io/client/mc/release/linux-${TARGETARCH}/mcli_${MINIO_VERSION}_${TARGETARCH}.deb.sha256sum && \
-  grep mcli_${MINIO_VERSION}_${TARGETARCH}.deb mcli_${MINIO_VERSION}_${TARGETARCH}.deb.sha256sum | sha256sum -c && \
-  dpkg -i /tmp/mcli_${MINIO_VERSION}_${TARGETARCH}.deb && \
-  rm -f /tmp/mcli_${MINIO_VERSION}_${TARGETARCH}.deb /tmp/mcli_${MINIO_VERSION}_${TARGETARCH}.deb.sha256sum  && \
-  ln -s /usr/local/bin/mcli /usr/local/bin/mc
+COPY --from=docker.io/minio/mc:RELEASE.2025-08-13T08-35-41Z \
+    /usr/bin/mc /usr/local/bin/mc
   
 
 # Vault CLI
@@ -124,13 +118,9 @@ RUN cd /tmp && \
 
 
 # Emergency-credentials-receive
-# renovate: datasource=github-releases depName=vshn/emergency-credentials-receive
-ARG ECR_VERSION=v1.2.2
-RUN cd /tmp && \
-    wget https://github.com/vshn/emergency-credentials-receive/releases/download/${ECR_VERSION}/emergency-credentials-receive_linux_${TARGETARCH} && \
-    chmod a+x /tmp/emergency-credentials-receive_linux_${TARGETARCH} && \
-    mv /tmp/emergency-credentials-receive_linux_${TARGETARCH} /usr/local/bin/emergency-credentials-receive && \
-    rm -f /tmp/emergency-credentials-receive_linux_${TARGETARCH}
+COPY --from=ghcr.io/vshn/emergency-credentials-receive:v1.2.2 \
+    /usr/bin/emergency-credentials-receive \
+    /usr/local/bin/emergency-credentials-receive
 
 # Exo CLI
 # renovate: datasource=github-releases depName=exoscale/cli
@@ -152,9 +142,8 @@ RUN chmod a+x /usr/local/bin/xdg-open
 ENV BROWSER=xdg-open
 
 # Gandalf
-# renovate: datasource=github-releases depName=appuio/gandalf
-ARG GANDALF_VERSION=v0.0.4
-RUN GOEXPERIMENT=jsonv2 go install github.com/appuio/gandalf@${GANDALF_VERSION} && cp ${HOME}/go/bin/gandalf /usr/local/bin/
+COPY --from=ghcr.io/appuio/gandalf:v0.0.4
+    /usr/bin/gandalf /usr/local/bin/gandalf
 
 # OIDC token callback for Commodore
 EXPOSE 18000

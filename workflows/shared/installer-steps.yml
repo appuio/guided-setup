@@ -19,15 +19,14 @@ steps:
         env -i "openshift_install_bin=$( pwd )/openshift-install" >> "$OUTPUT"
         exit 0
       else
-        echo "❌ openshift-install version $INSTALLED_VERSION is present, but version $MATCH_ocp_version is required."
+        echo "⚠️ openshift-install version $INSTALLED_VERSION is present, but version $MATCH_ocp_version is required. Deleting local binary and installing $MATCH_ocp_version"
         rm openshift-install
-        exit 1
       fi
     fi
 
     rm -f openshift-install-linux.tar.gz
     echo "Downloading openshift-install for version ${MATCH_ocp_version} ..."
-    curl -O https://mirror.openshift.com/pub/openshift-v4/clients/ocp/stable-${MATCH_ocp_version}/openshift-install-linux.tar.gz
-    tar -xf openshift-install-linux.tar.gz 
+    curl -LO https://mirror.openshift.com/pub/openshift-v4/clients/ocp/stable-${MATCH_ocp_version}/openshift-install-linux.tar.gz
+    tar -xf openshift-install-linux.tar.gz openshift-install
 
     env -i "openshift_install_bin=$( pwd )/openshift-install" >> "$OUTPUT"
