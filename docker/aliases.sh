@@ -55,8 +55,7 @@ shift $((OPTIND-1))
     ghcr.io/appuio/guided-setup:latest  \
     "${@}"
   
-  # shellcheck disable=2046
-  kill $(jobs -p)
+  kill %socat
 }
 
 guided-setup() {
