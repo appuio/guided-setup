@@ -1,5 +1,5 @@
 Given I have all prerequisites installed
-And I have the `openshift-install` binary for version "4.20"
+And I download the `openshift-install` binary for version "4.20"
 And a lieutenant cluster
 And a Keycloak service
 And Cloudscale API tokens

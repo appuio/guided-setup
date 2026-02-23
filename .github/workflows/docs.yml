@@ -19,11 +19,6 @@ jobs:
           repository: appuio/openshift4-docs
           path: docs
           token: ${{ secrets.DOCS_REPO }}
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: 'gs/go.mod'
-      - name: Run build
-        run: cd gs && make build
       - name: Generate docs
         shell: bash
         run: |
@@ -32,7 +27,15 @@ jobs:
             basename=${wf##*/}
             stripext=${basename%%.*}
             cloud=${stripext%%-*}
-            gs/guided-setup render "$wf" gs/workflows/"$cloud"/*.yml | sed -e 's/^=/==/' > docs/docs/modules/ROOT/partials/guided-setup/"$stripext".adoc
+            echo "Generating workflow for $cloud ..."
+            docker run --user $(id -u) --volume=$(pwd)/gs/workflows:/workflows ghcr.io/appuio/gandalf:latest render /workflows/"$basename" /workflows/"$cloud"/*.yml /workflows/shared/*.yml | sed -e 's/^=/==/' > docs/docs/modules/ROOT/partials/guided-setup/"$stripext".adoc
+            echo "Adding alias snippet ..."
+            cat > docs/docs/modules/ROOT/partials/guided-setup/guided-setup-alias.adoc <<EOF
+          [source,bash]
+          ----
+          $( cat gs/docker/aliases.sh | grep -v "#!" )
+          ----
+          EOF
           done
       - name: Commit and push changes (if any)
         if: ${{ github.event_name == 'push' }}
