@@ -53,7 +53,7 @@ RUN \
 
 # Kubectl
 # renovate: datasource=github-releases depName=kubernetes/kubernetes
-ARG KUBECTL_VERSION=v1.35.1
+ARG KUBECTL_VERSION=v1.35.2
 RUN \
     curl -fsSL https://pkgs.k8s.io/core:/stable:/${KUBECTL_VERSION%.*}/deb/Release.key | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg && \
     chmod 644 /etc/apt/keyrings/kubernetes-apt-keyring.gpg && \
