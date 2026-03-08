@@ -83,7 +83,7 @@ COPY --from=docker.io/minio/mc:RELEASE.2025-08-13T08-35-41Z \
 
 # Vault CLI
 # renovate: datasource=github-releases depName=hashicorp/vault
-ARG VAULT_VERSION=v1.21.2
+ARG VAULT_VERSION=v1.21.4
 RUN \
     cd /tmp && \
     wget https://releases.hashicorp.com/vault/${VAULT_VERSION##v}/vault_${VAULT_VERSION##v}_linux_${TARGETARCH}.zip && \
