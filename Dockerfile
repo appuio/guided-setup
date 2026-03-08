@@ -98,7 +98,7 @@ RUN \
 
 # OC
 # renovate: datasource=custom.oc depName=openshift-client
-ARG OC_VERSION=4.20.1
+ARG OC_VERSION=4.20.16
 RUN cd /tmp && \
     wget https://mirror.openshift.com/pub/openshift-v4/x86_64/clients/ocp/${OC_VERSION}/openshift-client-linux-${OC_VERSION}.tar.gz && \
     tar -xf /tmp/openshift-client-linux-${OC_VERSION}.tar.gz oc && \
