@@ -1,7 +1,7 @@
 ARG TARGETPLATFORM
 ARG TARGETARCH
 
-FROM projectsyn/commodore:v1.32.0 AS base
+FROM projectsyn/commodore:v1.32.1 AS base
 
 ENV TARGETARCH=${TARGETARCH:-amd64}
 
