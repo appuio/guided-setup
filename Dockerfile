@@ -68,7 +68,7 @@ COPY --from=docker.io/mikefarah/yq:4.52.4 /usr/bin/yq /usr/local/bin/yq
 
 # glab
 # renovate: datasource=gitlab-releases depName=gitlab-org/cli registryUrl=https://gitlab.com
-ARG GLAB_VERSION=v1.85.2
+ARG GLAB_VERSION=v1.89.0
 RUN \
   cd /tmp && \
   wget https://gitlab.com/gitlab-org/cli/-/releases/${GLAB_VERSION}/downloads/glab_${GLAB_VERSION##v}_linux_${TARGETARCH}.deb && \
