@@ -28,17 +28,16 @@ And I approve and label the new nodes
 And I configure initial deployments
 And I wait for installation to complete
 Then I create the registry S3 secret
-# And I enable default instance pool annotation injector for LB services
+And I enable default instance pool annotation injector for LB services
 
-# Then I synthesize the cluster
-# Then I set acme-dns CNAME records
-# 
-# And I verify emergency access
-# And I configure the cluster alerts
-# And I enable Opsgenie alerting
-# 
-# And I schedule the first maintenance
-# Then I configure apt-dater groups for the LoadBalancers
-# And I remove the bootstrap bucket
-# And I add the cluster to openshift4-clusters
-# And I wait for maintenance to complete
+Then I synthesize the cluster
+Then I set acme-dns CNAME records
+And I verify emergency access
+And I configure the cluster alerts
+And I enable Opsgenie alerting
+And I schedule the first maintenance
+
+Then I configure apt-dater groups for the LoadBalancers
+And I remove the bootstrap bucket
+And I add the cluster to openshift4-clusters
+And I wait for maintenance to complete

@@ -1,0 +1,47 @@
+steps:
+- match: Then I set acme-dns CNAME records
+  description: |-
+    This step ensures CNAME records exist for ACME challenges once cert-manager is properly deployed.
+    Set no_letsencrypt to 'y' if you are not using Let's Encrypt as your certificate authority and want to skip this step.
+  inputs:
+  - name: kubeconfig_path
+  - name: no_letsencrypt
+  - name: cluster_domain
+  - name: exoscale_key
+  - name: exoscale_secret
+  run: |
+    set -euo pipefail
+
+    if [[ "${INPUT_no_letsencrypt}" == "y" ]]; then
+      echo "no_letsencrypt is set to 'y', skipping ACME DNS record setup."
+      exit 0
+    fi 
+
+    export EXOSCALE_API_KEY="${INPUT_exoscale_key}"
+    export EXOSCALE_API_SECRET="${INPUT_exoscale_secret}"
+
+    export KUBECONFIG="${INPUT_kubeconfig_path}"
+
+    echo '# Waiting for cert-manager namespace ...'
+    kubectl wait --for=create ns/syn-cert-manager
+    echo '# Waiting for cert-manager secret ...'
+    kubectl wait --for=create secret/acme-dns-client -nsyn-cert-manager
+
+    fulldomain=""
+
+    while [[ -z "$fulldomain" ]]
+    do
+      fulldomain=$(kubectl -n syn-cert-manager \
+        get secret acme-dns-client \
+        -o jsonpath='{.data.acmedns\.json}' | \
+        base64 -d  | \
+        jq -r '[.[]][0].fulldomain')
+      echo "$fulldomain"
+    done
+
+    for cname in "api" "apps"; do
+      exo dns add CNAME "${INPUT_cluster_domain}" -n "_acme-challenge.${cname}" -a "${fulldomain}." -t 600
+    done
+
+    echo
+    echo "✅ ACME DNS records created successfully."
