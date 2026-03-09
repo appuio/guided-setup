@@ -591,19 +591,22 @@ steps:
       "-backend-config=unlock_method=DELETE" \
       "-backend-config=retry_wait_min=5"
 
-    # TODO: Make this step idempotent. Maybe just check if override.tf already exists and contains the expected content before applying it.
-    cat > override.tf <<EOF
-    module "cluster" {
-      bootstrap_count          = 0
-      lb_count                 = 0
-      master_count             = 0
-      infra_count              = 0
-      storage_count            = 0
-      worker_count             = 0
-      additional_worker_groups = {}
-    }
+    if [ -f override.tf ]; then
+      echo "override.tf already exists, skipping first terraform apply."
+    else
+      cat > override.tf <<EOF
+      module "cluster" {
+        bootstrap_count          = 0
+        lb_count                 = 0
+        master_count             = 0
+        infra_count              = 0
+        storage_count            = 0
+        worker_count             = 0
+        additional_worker_groups = {}
+      }
     EOF
-    terraform apply -auto-approve
+      terraform apply -auto-approve
+    fi
 
     cat > override.tf <<EOF
     module "cluster" {
@@ -908,7 +911,6 @@ steps:
   - name: exoscale_key
   - name: exoscale_secret
   - name: control_vshn_api_token
-  - name: ignition_bootstrap
   - name: hieradata_repo_token
   - name: gitlab_user_name
   - name: gitlab_api_token
@@ -925,12 +927,12 @@ steps:
     export GITLAB_USER="${INPUT_gitlab_user_name}"
 
     cat <<EOF > ./terraform.env
-    EXOSCALE_API_KEY="${INPUT_exoscale_key}"
-    EXOSCALE_API_SECRET="${INPUT_exoscale_secret}"
-    TF_VAR_control_vshn_net_token="${INPUT_control_vshn_api_token}"
+    EXOSCALE_API_KEY=${INPUT_exoscale_key}
+    EXOSCALE_API_SECRET=${INPUT_exoscale_secret}
+    TF_VAR_control_vshn_net_token=${INPUT_control_vshn_api_token}
     GIT_AUTHOR_NAME=$(git config --global user.name)
     GIT_AUTHOR_EMAIL=$(git config --global user.email)
-    HIERADATA_REPO_TOKEN="${INPUT_hieradata_repo_token}"
+    HIERADATA_REPO_TOKEN=${INPUT_hieradata_repo_token}
     EOF
 
     # Set terraform image and tag to be used
@@ -962,7 +964,7 @@ steps:
       "-backend-config=unlock_method=DELETE" \
       "-backend-config=retry_wait_min=5"
 
-    rm override.tf
+    rm -f override.tf
     terraform apply --auto-approve
 
     echo "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@"
@@ -995,8 +997,12 @@ steps:
     set -euo pipefail
     export KUBECONFIG="${INPUT_kubeconfig_path}"
 
+    # TODO: approve CSRs until all nodes are labelled and ready.
     echo "Approving node certs..."
-    oc get csr -o go-template='{{range .items}}{{if not .status}}{{.metadata.name}}{{"\n"}}{{end}}{{end}}' | xargs oc adm certificate approve
+    csrs=$(oc get csr -o go-template='{{range .items}}{{if not .status}}{{.metadata.name}}{{"\n"}}{{end}}{{end}}')
+    if [ -n "$csrs" ]; then 
+      echo "$csrs" | xargs oc adm certificate approve
+    fi
 
     echo "Label infra nodes..."
     kubectl get node -ojson | \
@@ -1008,7 +1014,7 @@ steps:
       jq -r '.items[] | select(.metadata.name | test("storage-")).metadata.name' | \
       xargs -I {} kubectl  label node {} node-role.kubernetes.io/storage=
 
-    kubectl taint node -lnode-role.kubernetes.io/storage storagenode=True:NoSchedule
+    kubectl taint node -lnode-role.kubernetes.io/storage storagenode=True:NoSchedule --overwrite
 
     echo "Label worker nodes..."
     kubectl get node -ojson | \
@@ -1072,16 +1078,54 @@ steps:
     This step creates a secret with the S3 credentials for the internal registry.
   inputs:
   - name: kubeconfig_path
-  - name: s3_access_key
-  - name: s3_secret_key
+  - name: s3_key
+  - name: s3_secret
   run: |
     set -euo pipefail
 
     export KUBECONFIG="${INPUT_kubeconfig_path}"
+    secret_name="image-registry-private-configuration-user"
 
-    oc create secret generic image-registry-private-configuration-user \
-      --namespace openshift-image-registry \
-      --from-literal=REGISTRY_STORAGE_S3_ACCESSKEY=${INPUT_s3_access_key} \
-      --from-literal=REGISTRY_STORAGE_S3_SECRETKEY=${INPUT_s3_secret_key}
+    if oc get secret "${secret_name}" -n openshift-image-registry &>/dev/null; then
+      echo "Secret ${secret_name} already exists, skipping creation."
+    else
+      oc create secret generic image-registry-private-configuration-user \
+        --namespace openshift-image-registry \
+        --from-literal=REGISTRY_STORAGE_S3_ACCESSKEY=${INPUT_s3_key} \
+        --from-literal=REGISTRY_STORAGE_S3_SECRETKEY=${INPUT_s3_secret}
+    fi
 
     echo "✅ Registry S3 secret created successfully."
+
+- match: And I enable default instance pool annotation injector for LB services
+  description: |-
+    This step enables default instance pool annotation injector for LoadBalancer services.
+  inputs:
+  - name: commodore_cluster_id
+  - name: commodore_tenant_id
+  - name: commodore_api_url
+  - name: gitlab_user_name
+  - name: gitlab_api_token
+  run: |
+    set -euo pipefail
+
+    export COMMODORE_API_URL="${INPUT_commodore_api_url}"
+    export CLUSTER_ID="${INPUT_commodore_cluster_id}"
+    export TENANT_ID="${INPUT_commodore_tenant_id}"
+    export GITLAB_USER="${INPUT_gitlab_user_name}"
+    export GITLAB_TOKEN="${INPUT_gitlab_api_token}"
+
+    export GITLAB_REPOSITORY_URL=$(curl -sH "Authorization: Bearer $(commodore fetch-token)" ${COMMODORE_API_URL}/clusters/${CLUSTER_ID} | jq -r '.gitRepo.url' | sed 's|ssh://||; s|/|:|')
+    export GITLAB_REPOSITORY_NAME=${GITLAB_REPOSITORY_URL##*/}
+    export GITLAB_CATALOG_PROJECT_ID=$(curl -sH "Authorization: Bearer ${GITLAB_TOKEN}" "https://git.vshn.net/api/v4/projects?simple=true&search=${GITLAB_REPOSITORY_NAME/.git}" | jq -r ".[] | select(.ssh_url_to_repo == \"${GITLAB_REPOSITORY_URL}\") | .id")
+    export GITLAB_STATE_URL="https://git.vshn.net/api/v4/projects/${GITLAB_CATALOG_PROJECT_ID}/terraform/state/cluster"
+
+    pushd "inventory/classes/${TENANT_ID}/"
+
+    curl -fsu "${GITLAB_USER}:${GITLAB_TOKEN}" "$GITLAB_STATE_URL" |\
+      jq '[.resources[] | select(.module == "module.cluster.module.worker" and .type == "exoscale_instance_pool")][0].instances[0].attributes.id' |\
+      yq ea -i 'select(fileIndex == 0) * (select(fileIndex == 1) | {"parameters": {"exoscale_cloud_controller_manager":{"serviceLoadBalancerDefaultAnnotations":{"service.beta.kubernetes.io/exoscale-loadbalancer-service-instancepool-id": .}}}}) ' \
+      "$CLUSTER_ID.yml" -
+    git commit -a -m "${CLUSTER_ID}: Enable default instance pool annotation injector for LoadBalancer services"
+    git push
+    popd

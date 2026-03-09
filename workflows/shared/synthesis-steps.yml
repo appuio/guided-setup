@@ -1,0 +1,130 @@
+steps:
+- match: Then I synthesize the cluster
+  description: |-
+    This step enables Project Syn on the cluster.
+  inputs:
+  - name: commodore_api_url
+  - name: commodore_cluster_id
+  - name: kubeconfig_path
+  run: |
+    set -euo pipefail
+
+    export COMMODORE_API_URL="${INPUT_commodore_api_url}"
+    export KUBECONFIG="${INPUT_kubeconfig_path}"
+    LIEUTENANT_AUTH="Authorization:Bearer $(commodore fetch-token)"
+
+    if ! kubectl get deploy -n syn steward > /dev/null; then
+      INSTALL_URL=$(curl -H "${LIEUTENANT_AUTH}" "${COMMODORE_API_URL}/clusters/${INPUT_commodore_cluster_id}" | jq -r ".installURL")
+
+      if [[ $INSTALL_URL == "null" ]]
+      # TODO(aa): consider doing this programmatically - especially if, at a later point, we add the lieutenant kubeconfig to the inputs anyway
+      then
+          echo '###################################################################################'
+          echo '#                                                                                 #'
+          echo '#  Could not fetch install URL! Please reset the bootstrap token and try again.   #'
+          echo '#                                                                                 #'
+          echo '###################################################################################'
+          echo
+          echo 'See https://kb.vshn.ch/corp-tech/projectsyn/explanation/bootstrap-token.html#_resetting_the_bootstrap_token'
+          exit 1
+      fi
+
+      echo "# Deploying steward ..."
+      kubectl create -f "$INSTALL_URL"
+    fi
+
+    echo "# Waiting for ArgoCD resource to exist ..."
+    kubectl wait --for=create crds/argocds.argoproj.io --timeout=5m
+
+    echo "# Waiting for ArgoCD instance to exist ..."
+    kubectl wait --for=create argocd/syn-argocd -nsyn --timeout=90s
+
+    echo "# Waiting for ArgoCD instance to be ready ..."
+    kubectl wait --for=jsonpath='{.status.phase}'=Available argocd/syn-argocd -nsyn --timeout=5m
+
+    echo "Done."
+
+- match: And I verify emergency access
+  description: |-
+    This step ensures the emergency credentials for the cluster can be retrieved.
+  inputs:
+  - name: kubeconfig_path
+  - name: cluster_domain
+  - name: commodore_cluster_id
+  - name: passbolt_passphrase
+    description: |-
+      Your password for Passbolt.
+
+      This is required to access the encrypted emergency credentials.
+  outputs:
+  - name: kubeconfig_path
+  run: |
+    set -euo pipefail
+    export KUBECONFIG="${INPUT_kubeconfig_path}"
+
+    echo '# Waiting for emergency-credentials-controller namespace ...'
+    kubectl wait --for=create ns/appuio-emergency-credentials-controller
+    echo '# Waiting for emergency-credentials-controller ...'
+    kubectl wait --for=create secret/acme-dns-client -nsyn-cert-manager
+
+    echo '# Waiting for emergency credential tokens ...'
+    until kubectl -n appuio-emergency-credentials-controller get emergencyaccounts.cluster.appuio.io -o=jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.status.lastTokenCreationTimestamp}{"\n"}{end}' | grep "$( date '+%Y' )" >/dev/null
+    do
+      echo -n .
+    done
+
+    export EMR_KUBERNETES_ENDPOINT=https://api.${INPUT_cluster_domain}:6443
+    export EMR_PASSPHRASE="${INPUT_passbolt_passphrase}"
+    emergency-credentials-receive "${INPUT_commodore_cluster_id}"
+
+    yq -i e '.clusters[0].cluster.insecure-skip-tls-verify = true' "em-${INPUT_commodore_cluster_id}"
+    export KUBECONFIG="em-${INPUT_commodore_cluster_id}"
+    kubectl get nodes
+    oc whoami | grep system:serviceaccount:appuio-emergency-credentials-controller: || exit 1
+
+    env -i "kubeconfig_path=$(pwd)/em-${INPUT_commodore_cluster_id}" >> "$OUTPUT"
+
+    echo "#  Invalidating 10-year admin kubeconfig ..."
+    kubectl -n openshift-config patch cm admin-kubeconfig-client-ca --type=merge -p '{"data": {"ca-bundle.crt": ""}}'
+
+- match: And I configure the cluster alerts
+  description: |-
+    This step configures monitoring alerts on the cluster.
+  inputs:
+  - name: kubeconfig_path
+  run: |
+    set -euo pipefail
+    export KUBECONFIG="${INPUT_kubeconfig_path}"
+
+    echo '# Installing default alert silence ...'
+    oc --as=system:admin -n openshift-monitoring get job silence-manual &>/dev/null || \
+      oc --as=system:admin -n openshift-monitoring create job --from=cronjob/silence silence-manual
+    oc wait -n openshift-monitoring --for=condition=complete job/silence-manual
+    oc --as=system:admin -n openshift-monitoring delete job/silence-manual
+
+    echo '# Retrieving active alerts ...'
+    kubectl --as=system:admin -n openshift-monitoring exec sts/alertmanager-main -- \
+      amtool --alertmanager.url=http://localhost:9093 alert --active
+    
+    echo
+    echo '#######################################################'
+    echo '#                                                     #'
+    echo '#  Please review the list of open alerts above,       #'
+    echo '#  address any that require action before proceeding. #'
+    echo '#                                                     #'
+    echo '#######################################################'
+    sleep 2
+
+- match: And I enable Opsgenie alerting
+  description: |-
+    This step enables Opsgenie alerting for the cluster via Project Syn.
+  inputs:
+  - name: commodore_cluster_id
+  - name: commodore_tenant_id
+  run: |
+    set -euo pipefail
+    pushd "inventory/classes/${INPUT_commodore_tenant_id}/"
+    yq eval -i 'del(.classes[] | select(. == "*.no-opsgenie"))' ${INPUT_commodore_cluster_id}.yml
+    git commit -a -m "Enable opsgenie alerting on cluster ${INPUT_commodore_cluster_id}"
+    git push
+    popd
