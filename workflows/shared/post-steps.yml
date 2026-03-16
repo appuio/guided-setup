@@ -57,20 +57,6 @@ steps:
     fi || true
     popd
 
-- match: And I remove the bootstrap bucket
-  description: |-
-    This step deletes the S3 bucket with the bootstrap ignition config.
-  inputs:
-  - name: commodore_cluster_id
-  - name: vault_address
-  run: |
-    set -euo pipefail
-
-    export VAULT_ADDR=${INPUT_vault_address}
-    vault login -method=oidc
-
-    mc rm -r --force "${INPUT_commodore_cluster_id}/${INPUT_commodore_cluster_id}-bootstrap-ignition"
-    mc rb "${INPUT_commodore_cluster_id}/${INPUT_commodore_cluster_id}-bootstrap-ignition"
 - match: And I schedule the first maintenance
   description: |-
     This step verifies that the UpgradeConfig object is present on the cluster,

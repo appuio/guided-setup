@@ -6,6 +6,8 @@ steps:
   inputs:
   - name: kubeconfig_path
   - name: no_letsencrypt
+    description: |-
+      Set this to 'y' if you are not using Let's Encrypt as your certificate authority and want to skip the ACME DNS record setup.
   - name: cluster_domain
   - name: exoscale_key
   - name: exoscale_secret
