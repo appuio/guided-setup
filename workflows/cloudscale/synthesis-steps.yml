@@ -9,9 +9,9 @@ steps:
     export KUBECONFIG="${INPUT_kubeconfig_path}"
 
     echo '# Waiting for cert-manager namespace ...'
-    kubectl wait --for=create ns/syn-cert-manager
+    kubectl wait --for=create ns/syn-cert-manager --timeout 3m
     echo '# Waiting for cert-manager secret ...'
-    kubectl wait --for=create secret/acme-dns-client -nsyn-cert-manager
+    kubectl wait --for=create secret/acme-dns-client --timeout 10m -nsyn-cert-manager
 
     fulldomain=""
 
@@ -25,10 +25,8 @@ steps:
       echo "$fulldomain"
     done
 
-    dnstmp=$(mktemp)
-
-    echo "_acme-challenge.api   IN CNAME $fulldomain." > "$dnstmp"
-    echo "_acme-challenge.apps  IN CNAME $fulldomain." >> "$dnstmp"
+    echo "_acme-challenge.api   IN CNAME $fulldomain." > dns.txt
+    echo "_acme-challenge.apps  IN CNAME $fulldomain." >> dns.txt
 
     echo "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@"
     echo "@                                                                                       @"
@@ -36,7 +34,7 @@ steps:
     echo "@  Most probably in https://git.vshn.net/vshn/vshn_zonefiles                            @"
     echo "@                                                                                       @"
     echo "@  If terminal selection does not work the entries can also be copied from              @"
-    echo "@    $dnstmp                                                                            @"
+    echo "@    dns.txt                                                                            @"
     echo "@                                                                                       @"
     echo "@  Waiting for record to propagate...                                                   @"
     echo "@                                                                                       @"
@@ -61,6 +59,7 @@ steps:
     do
       sleep 20
     done
+    rm dns.txt
 
 - match: And I verify the image registry config
   description: |-

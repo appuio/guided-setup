@@ -4,12 +4,15 @@ steps:
     This step deletes the S3 bucket with the bootstrap ignition config.
   inputs:
   - name: commodore_cluster_id
-  - name: vault_address
+  - name: csp_region
+  - name: bucket_user
   run: |
     set -euo pipefail
 
-    export VAULT_ADDR=${INPUT_vault_address}
-    vault login -method=oidc
+    mc alias set \
+      "${INPUT_commodore_cluster_id}" "https://objects.${INPUT_csp_region}.cloudscale.ch" \
+      "$(echo "$INPUT_bucket_user" | jq -r '.keys[0].access_key')" \
+      "$(echo "$INPUT_bucket_user" | jq -r '.keys[0].secret_key')"
 
     mc rm -r --force "${INPUT_commodore_cluster_id}/${INPUT_commodore_cluster_id}-bootstrap-ignition"
     mc rb "${INPUT_commodore_cluster_id}/${INPUT_commodore_cluster_id}-bootstrap-ignition"

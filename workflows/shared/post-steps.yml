@@ -37,8 +37,10 @@ steps:
 
     git add ./*.yaml
 
-    if not git diff-index --quiet HEAD
+    if git diff-index --quiet HEAD
     then
+      echo "No changes, skipping commit"
+    else
       git commit -m"Configure apt-dater groups for LBs for OCP4 cluster ${INPUT_commodore_cluster_id}"
       git push origin master
 
@@ -88,7 +90,7 @@ steps:
         .metadata.name = "first",
         .metadata.labels = {},
         .spec.jobTemplate.metadata.labels.upgradeconfig/name = "first",
-        .spec.schedule.cron = ((now+"1m")|format_datetime("4 15")) + " * * *",
+        .spec.schedule.cron = ((now+"1m")| tz("Europe/Zurich") | format_datetime("4 15")) + " * * *",
         .spec.pinVersionWindow = "0m"
       ' | \
       kubectl create -f - --as=system:admin
@@ -150,8 +152,10 @@ steps:
       git add --force "${INPUT_commodore_cluster_id}"
       git add .
 
-      if not git diff-index --quiet HEAD
+      if git diff-index --quiet HEAD
       then
+        echo "No changes, skipping commit"
+      else
         git commit -am "Add cluster ${INPUT_commodore_cluster_id}"
       fi || true
     fi

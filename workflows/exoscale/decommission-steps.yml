@@ -31,7 +31,7 @@ steps:
     TF_VAR_control_vshn_net_token=${INPUT_control_vshn_api_token}
     GIT_AUTHOR_NAME=$(git config --global user.name)
     GIT_AUTHOR_EMAIL=$(git config --global user.email)
-    HIERADATA_REPO_TOKEN=${INPUT_hieradata_repo_token}
+    HIERADATA_REPO_TOKEN=${INPUT_gitlab_api_token}
     EOF
 
     tf_image=$(\
@@ -44,7 +44,10 @@ steps:
     echo "Using Terraform image: ${tf_image}:${tf_tag}"
 
     base_dir=$(pwd)
-    alias terraform='touch .terraformrc; docker run --rm -e REAL_UID=$(id -u) -e TF_CLI_CONFIG_FILE=/tf/.terraformrc --env-file ${base_dir}/terraform.env -w /tf -v $(pwd):/tf --ulimit memlock=-1 "${tf_image}:${tf_tag}" /tf/terraform.sh'
+    terraform() {
+      touch .terraformrc
+      docker run --rm -e REAL_UID=$(id -u) -e TF_CLI_CONFIG_FILE=/tf/.terraformrc --env-file ${base_dir}/terraform.env -w /tf -v $(pwd):/tf --ulimit memlock=-1 "${tf_image}:${tf_tag}" /tf/terraform.sh "${@}"
+    }
 
     gitlab_repository_url=$(curl -sH "Authorization: Bearer $(commodore fetch-token)" ${INPUT_commodore_api_url}/clusters/${INPUT_commodore_cluster_id} | jq -r '.gitRepo.url' | sed 's|ssh://||; s|/|:|')
     gitlab_repository_name=${gitlab_repository_url##*/}
@@ -115,7 +118,7 @@ steps:
     TF_VAR_control_vshn_net_token=${INPUT_control_vshn_api_token}
     GIT_AUTHOR_NAME=$(git config --global user.name)
     GIT_AUTHOR_EMAIL=$(git config --global user.email)
-    HIERADATA_REPO_TOKEN=${INPUT_hieradata_repo_token}
+    HIERADATA_REPO_TOKEN=${INPUT_gitlab_api_token}
     EOF
 
     tf_image=$(\
@@ -128,7 +131,10 @@ steps:
     echo "Using Terraform image: ${tf_image}:${tf_tag}"
 
     base_dir=$(pwd)
-    alias terraform='touch .terraformrc; docker run --rm -e REAL_UID=$(id -u) -e TF_CLI_CONFIG_FILE=/tf/.terraformrc --env-file ${base_dir}/terraform.env -w /tf -v $(pwd):/tf --ulimit memlock=-1 "${tf_image}:${tf_tag}" /tf/terraform.sh'
+    terraform() {
+      touch .terraformrc
+      docker run --rm -e REAL_UID=$(id -u) -e TF_CLI_CONFIG_FILE=/tf/.terraformrc --env-file ${base_dir}/terraform.env -w /tf -v $(pwd):/tf --ulimit memlock=-1 "${tf_image}:${tf_tag}" /tf/terraform.sh "${@}"
+    }
 
     gitlab_repository_url=$(curl -sH "Authorization: Bearer $(commodore fetch-token)" ${INPUT_commodore_api_url}/clusters/${INPUT_commodore_cluster_id} | jq -r '.gitRepo.url' | sed 's|ssh://||; s|/|:|')
     gitlab_repository_name=${gitlab_repository_url##*/}

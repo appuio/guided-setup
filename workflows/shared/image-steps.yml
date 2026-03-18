@@ -12,7 +12,9 @@ steps:
   run: |
     set -euo pipefail
 
-    . ./workflows/cloudscale/scripts/semver.sh
+    # TODO(aa): this is not generic; it makes assumptions on the location of the script on the host.
+    # We will need a solution where gandalf provides the workflow base dir, e.g. in an env var
+    . /workflows/shared/scripts/semver.sh
 
     MAJOR=0
     MINOR=0

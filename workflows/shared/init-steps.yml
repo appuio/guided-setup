@@ -1,26 +1,4 @@
 steps:
-- match: And I have the `openshift-install` binary for version "(?P<ocp_version>[^"]+)"
-  description: |-
-    This step checks if the `openshift-install` binary for the specified OpenShift version is available in your PATH.
-
-    If not found, it provides instructions on how to download it.
-  run: |
-    set -euo pipefail
-
-    if command -v openshift-install >/dev/null 2>&1; then
-      INSTALLED_VERSION=$(openshift-install version | grep 'openshift-install' | awk '{print $2}' | sed 's/^v//' | sed -E 's/\.[0-9]{1,2}$//')
-      if [ "$INSTALLED_VERSION" = "$MATCH_ocp_version" ]; then
-        echo "✅ openshift-install version ${MATCH_ocp_version}.XX is installed."
-        exit 0
-      else
-        echo "❌ openshift-install version $INSTALLED_VERSION is installed, but version $MATCH_ocp_version is required. Please download the openshift-install binary for version $MATCH_ocp_version from https://mirror.openshift.com/pub/openshift-v4/clients/ocp/stable-${MATCH_ocp_version}/ and add it to your PATH."
-        exit 1
-      fi
-    else
-      echo "❌ openshift-install binary not found in PATH. Please download the openshift-install binary for version $MATCH_ocp_version"
-      echo "from https://mirror.openshift.com/pub/openshift-v4/clients/ocp/stable-${MATCH_ocp_version}/ and add it to your PATH."
-      exit 1
-    fi
 - match: And a lieutenant cluster
   description: |-
     This step retrieves the Commodore tenant ID associated with the given lieutenant cluster ID.
@@ -248,8 +226,13 @@ steps:
 - match: And I wait for bootstrap to complete
   description: |-
     This step waits for OpenShift bootstrap to complete successfully.
+  inputs:
+  - name: openshift_install_bin
   run: |
     set -euo pipefail
+    openshift-install() {
+      "${INPUT_openshift_install_bin}" "${@}"
+    }
     installer_dir="$(pwd)/target"
     openshift-install --dir "${installer_dir}" \
       wait-for bootstrap-complete --log-level debug
@@ -257,8 +240,13 @@ steps:
 - match: And I wait for installation to complete
   description: |-
     This step waits for OpenShift installation to complete successfully.
+  inputs:
+  - name: openshift_install_bin
   run: |
     set -euo pipefail
+    openshift-install() {
+      "${INPUT_openshift_install_bin}" "${@}"
+    }
     installer_dir="$(pwd)/target"
     openshift-install --dir "${installer_dir}" \
       wait-for install-complete --log-level debug

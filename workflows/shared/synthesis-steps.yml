@@ -35,6 +35,7 @@ steps:
 
     echo "# Waiting for ArgoCD resource to exist ..."
     kubectl wait --for=create crds/argocds.argoproj.io --timeout=5m
+    sleep 1 # to prevent race conditions
 
     echo "# Waiting for ArgoCD instance to exist ..."
     kubectl wait --for=create argocd/syn-argocd -nsyn --timeout=90s

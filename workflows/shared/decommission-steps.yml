@@ -237,8 +237,10 @@ steps:
     git rm "${INPUT_lb_fqdn_1}.yaml" || true
     git rm "${INPUT_lb_fqdn_2}.yaml" || true
 
-    if not git diff-index --quiet HEAD
+    if git diff-index --quiet HEAD
     then
+      echo "No changes, skipping commit"
+    else
       git commit -m"Decommission LBs for ${INPUT_commodore_cluster_id}"
       git push origin master
     fi || true
@@ -256,8 +258,10 @@ steps:
 
     git rm -rf "lbaas/${INPUT_commodore_cluster_id}"* || true
 
-    if not git diff-index --quiet HEAD
+    if git diff-index --quiet HEAD
     then
+      echo "No changes, skipping commit"
+    else
       git commit -m"Decommission ${INPUT_commodore_cluster_id}"
       git push origin master
     fi || true
@@ -417,8 +421,10 @@ steps:
 
     git rm -rf "${INPUT_commodore_cluster_id}" || true
 
-    if not git diff-index --quiet HEAD
+    if git diff-index --quiet HEAD
     then
+      echo "No changes, skipping commit"
+    else
       git checkout -b "remove-${INPUT_commodore_cluster_id}"
       git commit -m"Remove ${INPUT_commodore_cluster_id}"
       git push origin "remove-${INPUT_commodore_cluster_id}"
