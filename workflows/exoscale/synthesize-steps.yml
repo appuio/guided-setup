@@ -2,12 +2,12 @@ steps:
 - match: Then I set acme-dns CNAME records
   description: |-
     This step ensures CNAME records exist for ACME challenges once cert-manager is properly deployed.
-    Set no_letsencrypt to 'y' if you are not using Let's Encrypt as your certificate authority and want to skip this step.
+    This step is optional, but required if you are using Let's Encrypt as your certificate authority.
   inputs:
   - name: kubeconfig_path
   - name: no_letsencrypt
     description: |-
-      Set this to 'y' if you are not using Let's Encrypt as your certificate authority and want to skip the ACME DNS record setup.
+      y/n: Set no_letsencrypt to 'y' if you want to skip this step, because you are not using Let's Encrypt as your certificate authority.
   - name: cluster_domain
   - name: exoscale_key
   - name: exoscale_secret
