@@ -509,10 +509,6 @@ steps:
     yq eval -i ".parameters.openshift4_terraform.terraform_variables.ssh_key = \"$(cat ${INPUT_ssh_public_key_path})\"" \
       ${INPUT_commodore_cluster_id}.yml
 
-    # TODO: We should remove the writing of the ssh key to the terraform variables from the shared steps, 
-    # since cloudscale wants an array and exoscale wants a string.
-    yq -i "del(.parameters.openshift4_terraform.terraform_variables.ssh_keys)" ${INPUT_commodore_cluster_id}.yml
-
     yq eval -i ".parameters.openshift4_terraform.terraform_variables.rhcos_template = \"${INPUT_rhcos_template}\"" ${CLUSTER_ID}.yml
 
     echo "Commit changes"
@@ -1018,6 +1014,10 @@ steps:
   run: |
     set -euo pipefail
     export KUBECONFIG="${INPUT_kubeconfig_path}"
+
+    echo '##### CAUTION: This step does not currently wait for all CSRs to be created. #####'
+    echo '#####    Please re-run this step until no more CSRs are getting signed.      #####'
+    sleep 3
 
     # TODO: approve CSRs until all nodes are labelled and ready.
     echo "Approving node certs..."

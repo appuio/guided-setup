@@ -200,12 +200,6 @@ steps:
     yq eval -i ".parameters.openshift4_terraform.terraform_variables.ignition_ca = \"${ca_cert}\"" \
       ${INPUT_commodore_cluster_id}.yml
 
-    yq eval -i ".parameters.openshift4_terraform.terraform_variables.ssh_keys = [\"$(cat ${INPUT_ssh_public_key_path})\"]" \
-      ${INPUT_commodore_cluster_id}.yml
-
-    yq eval -i ".parameters.openshift4_terraform.terraform_variables.allocate_router_vip_for_lb_controller = true" \
-      ${INPUT_commodore_cluster_id}.yml
-
     yq eval -i ".parameters.openshift4_terraform.terraform_variables.team = \"${MATCH_team_name}\"" \
       ${INPUT_commodore_cluster_id}.yml
 

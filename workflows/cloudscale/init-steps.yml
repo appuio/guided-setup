@@ -338,6 +338,49 @@ steps:
     env -i "ignition_bootstrap=$ignition_bootstrap" >> "$OUTPUT"
 
     echo "✅ OpenShift installer configured successfully."
+- match: And I configure Terraform for Cloudscale
+  description: |-
+    Review the file ./inventory/classes/${INPUT_commodore_tenant_id}/${INPUT_commodore_cluster_id}.yml.
+    Override default parameters or add more component configurations as required for your cluster.
+
+    Then press enter to commit and compile.
+  inputs:
+  - name: commodore_api_url
+  - name: commodore_cluster_id
+  - name: commodore_tenant_id
+  - name: image_major
+  - name: image_minor
+  - name: rhcos_template
+  - name: ssh_public_key_path
+  run: |
+    set -euo pipefail
+
+    export COMMODORE_API_URL="${INPUT_commodore_api_url}"
+    export CLUSTER_ID="${INPUT_commodore_cluster_id}"
+    export TENANT_ID="${INPUT_commodore_tenant_id}"
+
+    pushd "inventory/classes/${TENANT_ID}/"
+
+    yq eval -i ".parameters.openshift4_terraform.terraform_variables.allocate_router_vip_for_lb_controller = true" \
+      ${INPUT_commodore_cluster_id}.yml
+
+    yq eval -i ".parameters.openshift4_terraform.terraform_variables.ssh_keys = [\"$(cat ${INPUT_ssh_public_key_path})\"]" \
+      ${INPUT_commodore_cluster_id}.yml
+
+    echo "Commit changes"
+    git commit -a -m "Set Exoscale specific values in cluster ${CLUSTER_ID}"
+    git push
+
+    popd
+
+    echo "Compile and push cluster catalog"
+    commodore catalog compile ${CLUSTER_ID} --push \
+      --dynamic-fact kubernetesVersion.major=1 \
+      --dynamic-fact kubernetesVersion.minor="$((INPUT_image_minor+13))" \
+      --dynamic-fact openshiftVersion.Major=${INPUT_image_major} \
+      --dynamic-fact openshiftVersion.Minor=${INPUT_image_minor}
+
+    echo "✅ Changes committed and cluster catalog compiled successfully."
 
 - match: Then I provision the loadbalancers
   description: |-

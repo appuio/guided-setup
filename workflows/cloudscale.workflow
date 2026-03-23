@@ -14,6 +14,7 @@ And I check the cluster domain
 And I prepare the cluster repository
 Then I configure the OpenShift installer
 And I configure Terraform for team "aldebaran"
+And I configure Terraform for Cloudscale
 Then I provision the loadbalancers
 And I provision the bootstrap node
 And I store the subnet ID and floating IP in the Syn hierarchy
