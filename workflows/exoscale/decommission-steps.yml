@@ -6,12 +6,10 @@ steps:
   - name: exoscale_key
   - name: exoscale_secret
   - name: control_vshn_api_token
-  - name: hieradata_repo_token
   - name: gitlab_user_name
   - name: gitlab_api_token
   - name: commodore_cluster_id
   - name: commodore_api_url
-  - name: cluster_domain
   - name: rhcos_template
   - name: csp_region
   outputs:
@@ -52,7 +50,7 @@ steps:
     base_dir=$(pwd)
     terraform() {
       touch .terraformrc
-      docker run --rm -e REAL_UID=$(id -u) -e TF_CLI_CONFIG_FILE=/tf/.terraformrc --env-file ${base_dir}/terraform.env -w /tf -v $(pwd):/tf --ulimit memlock=-1 "${tf_image}:${tf_tag}" /tf/terraform.sh "${@}"
+      docker run --rm -e REAL_UID="$(id -u)" -e TF_CLI_CONFIG_FILE=/tf/.terraformrc --env-file "${base_dir}/terraform.env" -w /tf -v "$(pwd):/tf" --ulimit memlock=-1 "${tf_image}:${tf_tag}" /tf/terraform.sh "${@}"
     }
 
     gitlab_repository_url=$(curl -sH "Authorization: Bearer $(commodore fetch-token)" ${INPUT_commodore_api_url}/clusters/${INPUT_commodore_cluster_id} | jq -r '.gitRepo.url' | sed 's|ssh://||; s|/|:|')
@@ -106,12 +104,10 @@ steps:
   - name: exoscale_key
   - name: exoscale_secret
   - name: control_vshn_api_token
-  - name: hieradata_repo_token
   - name: gitlab_user_name
   - name: gitlab_api_token
   - name: commodore_cluster_id
   - name: commodore_api_url
-  - name: cluster_domain
   - name: rhcos_template
   - name: csp_region
   run: |
@@ -145,7 +141,7 @@ steps:
     base_dir=$(pwd)
     terraform() {
       touch .terraformrc
-      docker run --rm -e REAL_UID=$(id -u) -e TF_CLI_CONFIG_FILE=/tf/.terraformrc --env-file ${base_dir}/terraform.env -w /tf -v $(pwd):/tf --ulimit memlock=-1 "${tf_image}:${tf_tag}" /tf/terraform.sh "${@}"
+      docker run --rm -e REAL_UID="$(id -u)" -e TF_CLI_CONFIG_FILE=/tf/.terraformrc --env-file "${base_dir}/terraform.env" -w /tf -v "$(pwd):/tf" --ulimit memlock=-1 "${tf_image}:${tf_tag}" /tf/terraform.sh "${@}"
     }
 
     gitlab_repository_url=$(curl -sH "Authorization: Bearer $(commodore fetch-token)" ${INPUT_commodore_api_url}/clusters/${INPUT_commodore_cluster_id} | jq -r '.gitRepo.url' | sed 's|ssh://||; s|/|:|')
@@ -172,25 +168,6 @@ steps:
 
     terraform destroy --auto-approve
     popd
-
-- match: Then I delete Cloudscale server groups
-  description: |-
-    This step cleans up server groups configured for this cluster on Cloudscale.
-  inputs:
-  - name: cloudscale_token
-  - name: commodore_cluster_id
-  run: |
-    set -euo pipefail
-    echo "TODO"
-    exit 1
-    for server_group_uuid in $(curl -H"Authorization: Bearer ${INPUT_cloudscale_token}" \
-      https://api.cloudscale.ch/v1/server-groups | \
-      jq -r --arg cluster_id "${INPUT_commodore_cluster_id}" \
-      '.[]|select(.name|startswith($cluster_id))|.uuid'); do
-      curl -H"Authorization: Bearer ${INPUT_cloudscale_token}" \
-        "https://api.cloudscale.ch/v1/server-groups/${server_group_uuid}" \
-        -XDELETE
-    done
 
 - match: And I delete all S3 buckets
   description: |-

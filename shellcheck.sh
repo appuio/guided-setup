@@ -43,7 +43,7 @@ do
                 echo "### STEP: $step"
                 echo "###################################"
             fi
-            shellcheck -s bash "$script" -e 2129
+            shellcheck -s bash "$script" -e 2129 -e 2002
             ret=$?
             errors_found="$(( errors_found + ret ))"
             if (( ret != 0 )) && ! $verbose

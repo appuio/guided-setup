@@ -122,9 +122,7 @@ steps:
   - name: commodore_api_url
   - name: commodore_cluster_id
   - name: commodore_tenant_id
-  - name: hieradata_repo_user
   - name: cluster_domain
-  - name: hieradata_repo_token
   - name: image_major
   - name: image_minor
   run: |
@@ -350,7 +348,6 @@ steps:
   - name: commodore_tenant_id
   - name: image_major
   - name: image_minor
-  - name: rhcos_template
   - name: ssh_public_key_path
   run: |
     set -euo pipefail
@@ -390,7 +387,6 @@ steps:
   - name: cloudscale_token_floaty
   - name: control_vshn_api_token
   - name: ignition_bootstrap
-  - name: hieradata_repo_token
   - name: gitlab_user_name
   - name: gitlab_api_token
   - name: commodore_cluster_id
@@ -426,7 +422,7 @@ steps:
     base_dir=$(pwd)
     terraform() {
       touch .terraformrc
-      docker run --rm -e REAL_UID=$(id -u) -e TF_CLI_CONFIG_FILE=/tf/.terraformrc --env-file ${base_dir}/terraform.env -w /tf -v $(pwd):/tf --ulimit memlock=-1 "${tf_image}:${tf_tag}" /tf/terraform.sh "${@}"
+      docker run --rm -e REAL_UID="$(id -u)" -e TF_CLI_CONFIG_FILE=/tf/.terraformrc --env-file "${base_dir}/terraform.env" -w /tf -v "$(pwd):/tf" --ulimit memlock=-1 "${tf_image}:${tf_tag}" /tf/terraform.sh "${@}"
     }
 
     gitlab_repository_url=$(curl -sH "Authorization: Bearer $(commodore fetch-token)" ${INPUT_commodore_api_url}/clusters/${INPUT_commodore_cluster_id} | jq -r '.gitRepo.url' | sed 's|ssh://||; s|/|:|')
@@ -528,7 +524,6 @@ steps:
   - name: cloudscale_token_floaty
   - name: control_vshn_api_token
   - name: ignition_bootstrap
-  - name: hieradata_repo_token
   - name: gitlab_user_name
   - name: gitlab_api_token
   - name: commodore_cluster_id
@@ -565,7 +560,7 @@ steps:
     base_dir=$(pwd)
     terraform() {
       touch .terraformrc
-      docker run --rm -e REAL_UID=$(id -u) -e TF_CLI_CONFIG_FILE=/tf/.terraformrc --env-file ${base_dir}/terraform.env -w /tf -v $(pwd):/tf --ulimit memlock=-1 "${tf_image}:${tf_tag}" /tf/terraform.sh "${@}"
+      docker run --rm -e REAL_UID="$(id -u)" -e TF_CLI_CONFIG_FILE=/tf/.terraformrc --env-file "${base_dir}/terraform.env" -w /tf -v "$(pwd):/tf" --ulimit memlock=-1 "${tf_image}:${tf_tag}" /tf/terraform.sh "${@}"
     }
 
     gitlab_repository_url=$(curl -sH "Authorization: Bearer $(commodore fetch-token)" ${INPUT_commodore_api_url}/clusters/${INPUT_commodore_cluster_id} | jq -r '.gitRepo.url' | sed 's|ssh://||; s|/|:|')
@@ -633,7 +628,6 @@ steps:
   - name: cloudscale_token_floaty
   - name: control_vshn_api_token
   - name: ignition_bootstrap
-  - name: hieradata_repo_token
   - name: gitlab_user_name
   - name: gitlab_api_token
   - name: commodore_cluster_id
@@ -667,7 +661,7 @@ steps:
     base_dir=$(pwd)
     terraform() {
       touch .terraformrc
-      docker run --rm -e REAL_UID=$(id -u) -e TF_CLI_CONFIG_FILE=/tf/.terraformrc --env-file ${base_dir}/terraform.env -w /tf -v $(pwd):/tf --ulimit memlock=-1 "${tf_image}:${tf_tag}" /tf/terraform.sh "${@}"
+      docker run --rm -e REAL_UID="$(id -u)" -e TF_CLI_CONFIG_FILE=/tf/.terraformrc --env-file "${base_dir}/terraform.env" -w /tf -v "$(pwd):/tf" --ulimit memlock=-1 "${tf_image}:${tf_tag}" /tf/terraform.sh "${@}"
     }
 
     gitlab_repository_url=$(curl -sH "Authorization: Bearer $(commodore fetch-token)" ${INPUT_commodore_api_url}/clusters/${INPUT_commodore_cluster_id} | jq -r '.gitRepo.url' | sed 's|ssh://||; s|/|:|')
@@ -722,7 +716,6 @@ steps:
   - name: cloudscale_token_floaty
   - name: control_vshn_api_token
   - name: ignition_bootstrap
-  - name: hieradata_repo_token
   - name: gitlab_user_name
   - name: gitlab_api_token
   - name: commodore_cluster_id
@@ -756,7 +749,7 @@ steps:
     base_dir=$(pwd)
     terraform() {
       touch .terraformrc
-      docker run --rm -e REAL_UID=$(id -u) -e TF_CLI_CONFIG_FILE=/tf/.terraformrc --env-file ${base_dir}/terraform.env -w /tf -v $(pwd):/tf --ulimit memlock=-1 "${tf_image}:${tf_tag}" /tf/terraform.sh "${@}"
+      docker run --rm -e REAL_UID="$(id -u)" -e TF_CLI_CONFIG_FILE=/tf/.terraformrc --env-file "${base_dir}/terraform.env" -w /tf -v "$(pwd):/tf" --ulimit memlock=-1 "${tf_image}:${tf_tag}" /tf/terraform.sh "${@}"
     }
 
     gitlab_repository_url=$(curl -sH "Authorization: Bearer $(commodore fetch-token)" ${INPUT_commodore_api_url}/clusters/${INPUT_commodore_cluster_id} | jq -r '.gitRepo.url' | sed 's|ssh://||; s|/|:|')
@@ -884,7 +877,6 @@ steps:
   - name: cloudscale_token_floaty
   - name: control_vshn_api_token
   - name: ignition_bootstrap
-  - name: hieradata_repo_token
   - name: gitlab_user_name
   - name: gitlab_api_token
   - name: commodore_cluster_id
@@ -918,7 +910,7 @@ steps:
     base_dir=$(pwd)
     terraform() {
       touch .terraformrc
-      docker run --rm -e REAL_UID=$(id -u) -e TF_CLI_CONFIG_FILE=/tf/.terraformrc --env-file ${base_dir}/terraform.env -w /tf -v $(pwd):/tf --ulimit memlock=-1 "${tf_image}:${tf_tag}" /tf/terraform.sh "${@}"
+      docker run --rm -e REAL_UID="$(id -u)" -e TF_CLI_CONFIG_FILE=/tf/.terraformrc --env-file "${base_dir}/terraform.env" -w /tf -v "$(pwd):/tf" --ulimit memlock=-1 "${tf_image}:${tf_tag}" /tf/terraform.sh "${@}"
     }
 
     gitlab_repository_url=$(curl -sH "Authorization: Bearer $(commodore fetch-token)" ${INPUT_commodore_api_url}/clusters/${INPUT_commodore_cluster_id} | jq -r '.gitRepo.url' | sed 's|ssh://||; s|/|:|')

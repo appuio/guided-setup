@@ -5,7 +5,7 @@ steps:
   outputs:
   - name: image_id
   run: |
-    echo Uploading image "$MATCH_image_name"
+    echo Uploading image "$MATCH_image_name" to "$INPUT_cloudplosion_org_id" ...
     sleep 0.7
     printf .
     sleep 0.7
@@ -24,4 +24,4 @@ steps:
     printf .
     echo
     echo Uploaded image with ID "img-1234567890abcdef"
-    env -i "image_id=img-1234567890abcdef" >> $OUTPUT
+    env -i "image_id=img-1234567890abcdef" >> "$OUTPUT"

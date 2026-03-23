@@ -138,6 +138,11 @@ steps:
       Red Hat pull secret for accessing Red Hat container images.
 
       Get a pull secret from https://cloud.redhat.com/openshift/install/pull-secret.
+  run: |
+    set -euo pipefail
+    echo "Base domain set to ${INPUT_base_domain}".
+    echo "${INPUT_redhat_pull_secret}" | jq > /dev/null
+    echo "Pull secret appears legit."
 - match: And I check the cluster domain
   description: |-
     Please verify that the base domain generated is correct for your setup.
