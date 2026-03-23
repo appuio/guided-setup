@@ -532,7 +532,7 @@ steps:
 
 - match: Then I provision the loadbalancers
   description: |-
-    This step provisions the load balancers for the Cloudscale OpenShift cluster using Terraform.
+    This step provisions the load balancers for the Exoscale OpenShift cluster using Terraform.
   inputs:
   - name: exoscale_key
   - name: exoscale_secret
@@ -600,7 +600,7 @@ steps:
       "-backend-config=retry_wait_min=5"
 
     if [ -f override.tf ]; then
-      echo "override.tf already exists, skipping first terraform apply."
+      echo "override.tf already exists, not changing it"
     else
       cat > override.tf <<EOF
       module "cluster" {
@@ -613,8 +613,9 @@ steps:
         additional_worker_groups = {}
       }
     EOF
-      terraform apply -auto-approve
     fi
+
+    terraform apply -auto-approve
 
     cat > override.tf <<EOF
     module "cluster" {
@@ -633,6 +634,8 @@ steps:
     echo "@  Please review and merge the LB hieradata MR listed in Terraform output hieradata_mr. @"
     echo "@                                                                                       @"
     echo "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@"
+
+    sleep 3
     while (GITLAB_HOST=git.vshn.net GITLAB_TOKEN="${INPUT_gitlab_api_token}" glab mr list -R=appuio/appuio_hieradata | grep "${INPUT_commodore_cluster_id}")
     do
       sleep 10
@@ -780,6 +783,7 @@ steps:
     echo "@  Please review and merge the LB hieradata MR listed in Terraform output hieradata_mr. @"
     echo "@                                                                                       @"
     echo "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@"
+    sleep 3
     while (GITLAB_HOST=git.vshn.net GITLAB_TOKEN="${INPUT_gitlab_api_token}" glab mr list -R=appuio/appuio_hieradata | grep "${INPUT_commodore_cluster_id}")
     do
       sleep 10
@@ -989,6 +993,7 @@ steps:
     echo "@  Please review and merge the LB hieradata MR listed in Terraform output hieradata_mr. @"
     echo "@                                                                                       @"
     echo "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@"
+    sleep 3
     while (GITLAB_HOST=git.vshn.net GITLAB_TOKEN="${INPUT_gitlab_api_token}" glab mr list -R=appuio/appuio_hieradata | grep "${INPUT_commodore_cluster_id}")
     do
       sleep 10

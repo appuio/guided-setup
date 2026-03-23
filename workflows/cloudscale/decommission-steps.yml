@@ -29,7 +29,22 @@ steps:
 
     env -i "cloudscale_token=${token}" >> "$OUTPUT"
     env -i "cloudscale_token_floaty=${floaty}" >> "$OUTPUT"
-
+- match: And I delete all Load Balancer services and Load Balancers
+  description: |-
+    This step deletes all services of type LoadBalancer from the cluster.
+    It then deletes all LoadBalancer instances as well, so that the
+    corresponding Cloudscale resources can be decommissioned by the controller.
+  inputs:
+  - name: kubeconfig_path
+  run: |
+    set -euo pipefail
+    export KUBECONFIG="${INPUT_kubeconfig_path}"
+    echo '#  Deleting Services ...  #'
+    kubectl delete svc --field-selector spec.type=LoadBalancer -A
+    echo '#  Deleted Services.  #'
+    echo '#  Deleting LoadBalancers ...  #'
+    kubectl delete loadbalancers -A --all
+    echo '#  Deleted LoadBalancers.  #'
 - match: Then I save the loadbalancer metadata
   description: |-
     This step gathers metadata on the LoadBalancer instances (such as their icinga zone and backup server), such that they can be properly decommissioned down the line.
