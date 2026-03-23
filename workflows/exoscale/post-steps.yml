@@ -1,0 +1,15 @@
+steps:
+- match: And I remove the bootstrap bucket
+  description: |-
+    This step deletes the S3 bucket with the bootstrap ignition config.
+  inputs:
+  - name: commodore_cluster_id
+  - name: exoscale_key
+  - name: exoscale_secret
+  run: |
+    set -euo pipefail
+
+    export EXOSCALE_API_KEY="${INPUT_exoscale_key}"
+    export EXOSCALE_API_SECRET="${INPUT_exoscale_secret}"
+
+    exo storage rb -r -f "sos://${INPUT_commodore_cluster_id}-bootstrap"
