@@ -57,6 +57,7 @@ guided-setup-base() {
     --user="$(id -u)" \
     "${extra_groups[@]}" \
     --env SSH_AUTH_SOCK=/tmp/ssh_agent.sock \
+    --env GLAB_CONFIG_DIR="${PWD}" \
     --network host \
     --volume "${SSH_AUTH_SOCK}:/tmp/ssh_agent.sock" \
     --volume "${HOME}/.ssh/config:/app/.ssh/config:ro" \
