@@ -122,9 +122,7 @@ steps:
   - name: commodore_api_url
   - name: commodore_cluster_id
   - name: commodore_tenant_id
-  - name: hieradata_repo_user
   - name: cluster_domain
-  - name: hieradata_repo_token
   - name: image_major
   - name: image_minor
   run: |
@@ -150,7 +148,7 @@ steps:
 
     yq eval -i '.parameters.openshift.cloudscale.subnet_uuid = "TO_BE_DEFINED"' ${INPUT_commodore_cluster_id}.yml
 
-    yq eval -i '.parameters.openshift.cloudscale.rhcos_image_slug = "rhcos-4.19"' \
+    yq eval -i '.parameters.openshift.cloudscale.rhcos_image_slug = "rhcos-'"${INPUT_image_major}.${INPUT_image_minor}"'"' \
       ${INPUT_commodore_cluster_id}.yml
 
     yq eval -i ".parameters.openshift4_terraform.terraform_variables.ignition_ca = \"TO_BE_DEFINED\"" \
@@ -200,11 +198,16 @@ steps:
   - name: csp_region
   - name: bucket_user
   - name: cloudscale_token
+  - name: openshift_install_bin
   outputs:
   - name: ignition_bootstrap
   - name: ssh_public_key_path
   run: |
     set -euo pipefail
+
+    openshift-install() {
+      "${INPUT_openshift_install_bin}" "${@}"
+    }
 
     export VAULT_ADDR="${INPUT_vault_address}"
     vault login -method=oidc
@@ -333,6 +336,48 @@ steps:
     env -i "ignition_bootstrap=$ignition_bootstrap" >> "$OUTPUT"
 
     echo "✅ OpenShift installer configured successfully."
+- match: And I configure Terraform for Cloudscale
+  description: |-
+    Review the file ./inventory/classes/${INPUT_commodore_tenant_id}/${INPUT_commodore_cluster_id}.yml.
+    Override default parameters or add more component configurations as required for your cluster.
+
+    Then press enter to commit and compile.
+  inputs:
+  - name: commodore_api_url
+  - name: commodore_cluster_id
+  - name: commodore_tenant_id
+  - name: image_major
+  - name: image_minor
+  - name: ssh_public_key_path
+  run: |
+    set -euo pipefail
+
+    export COMMODORE_API_URL="${INPUT_commodore_api_url}"
+    export CLUSTER_ID="${INPUT_commodore_cluster_id}"
+    export TENANT_ID="${INPUT_commodore_tenant_id}"
+
+    pushd "inventory/classes/${TENANT_ID}/"
+
+    yq eval -i ".parameters.openshift4_terraform.terraform_variables.allocate_router_vip_for_lb_controller = true" \
+      ${INPUT_commodore_cluster_id}.yml
+
+    yq eval -i ".parameters.openshift4_terraform.terraform_variables.ssh_keys = [\"$(cat ${INPUT_ssh_public_key_path})\"]" \
+      ${INPUT_commodore_cluster_id}.yml
+
+    echo "Commit changes"
+    git commit -a -m "Set Exoscale specific values in cluster ${CLUSTER_ID}"
+    git push
+
+    popd
+
+    echo "Compile and push cluster catalog"
+    commodore catalog compile ${CLUSTER_ID} --push \
+      --dynamic-fact kubernetesVersion.major=1 \
+      --dynamic-fact kubernetesVersion.minor="$((INPUT_image_minor+13))" \
+      --dynamic-fact openshiftVersion.Major=${INPUT_image_major} \
+      --dynamic-fact openshiftVersion.Minor=${INPUT_image_minor}
+
+    echo "✅ Changes committed and cluster catalog compiled successfully."
 
 - match: Then I provision the loadbalancers
   description: |-
@@ -342,7 +387,6 @@ steps:
   - name: cloudscale_token_floaty
   - name: control_vshn_api_token
   - name: ignition_bootstrap
-  - name: hieradata_repo_token
   - name: gitlab_user_name
   - name: gitlab_api_token
   - name: commodore_cluster_id
@@ -363,7 +407,7 @@ steps:
     TF_VAR_control_vshn_net_token=${INPUT_control_vshn_api_token}
     GIT_AUTHOR_NAME=$(git config --global user.name)
     GIT_AUTHOR_EMAIL=$(git config --global user.email)
-    HIERADATA_REPO_TOKEN=${INPUT_hieradata_repo_token}
+    HIERADATA_REPO_TOKEN=${INPUT_gitlab_api_token}
     EOF
 
     tf_image=$(\
@@ -376,7 +420,10 @@ steps:
     echo "Using Terraform image: ${tf_image}:${tf_tag}"
 
     base_dir=$(pwd)
-    alias terraform='touch .terraformrc; docker run --rm -e REAL_UID=$(id -u) -e TF_CLI_CONFIG_FILE=/tf/.terraformrc --env-file ${base_dir}/terraform.env -w /tf -v $(pwd):/tf --ulimit memlock=-1 "${tf_image}:${tf_tag}" /tf/terraform.sh'
+    terraform() {
+      touch .terraformrc
+      docker run --rm -e REAL_UID="$(id -u)" -e TF_CLI_CONFIG_FILE=/tf/.terraformrc --env-file "${base_dir}/terraform.env" -w /tf -v "$(pwd):/tf" --ulimit memlock=-1 "${tf_image}:${tf_tag}" /tf/terraform.sh "${@}"
+    }
 
     gitlab_repository_url=$(curl -sH "Authorization: Bearer $(commodore fetch-token)" ${INPUT_commodore_api_url}/clusters/${INPUT_commodore_cluster_id} | jq -r '.gitRepo.url' | sed 's|ssh://||; s|/|:|')
     gitlab_repository_name=${gitlab_repository_url##*/}
@@ -423,15 +470,14 @@ steps:
     done
 
     terraform apply -auto-approve
-    dnstmp=$(mktemp)
-    terraform output -raw cluster_dns > "$dnstmp"
+    terraform output -raw cluster_dns > ../../../dns.txt
     echo "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@"
     echo "@                                                                                       @"
     echo "@  Please add the DNS records shown in the Terraform output to your DNS provider.       @"
     echo "@  Most probably in https://git.vshn.net/vshn/vshn_zonefiles                            @"
     echo "@                                                                                       @"
     echo "@  If terminal selection does not work the entries can also be copied from              @"
-    echo "@    $dnstmp                                                                            @"
+    echo "@    dns.txt                                                                            @"
     echo "@                                                                                       @"
     echo "@  Waiting for record to propagate...                                                   @"
     echo "@                                                                                       @"
@@ -440,7 +486,7 @@ steps:
     do
       sleep 15
     done
-    rm -f "$dnstmp"
+    rm ../../../dns.txt
 
     lb1=$(terraform state show "module.cluster.module.lb.cloudscale_server.lb[0]" | grep fqdn | awk '{print $2}' | tr -d ' "\r\n')
     lb2=$(terraform state show "module.cluster.module.lb.cloudscale_server.lb[1]" | grep fqdn | awk '{print $2}' | tr -d ' "\r\n')
@@ -460,7 +506,7 @@ steps:
     done
 
     echo "updating ssh config..."
-    ssh management2.corp.vshn.net "sshop --output-archive /dev/stdout" | tar -C ~ -xzf -
+    ssh management2.corp.vshn.net "sshop --output-archive /dev/stdout" | tar -C ~  --overwrite -xzf -
     echo "done"
 
     echo "waiting for ssh access ..."
@@ -478,7 +524,6 @@ steps:
   - name: cloudscale_token_floaty
   - name: control_vshn_api_token
   - name: ignition_bootstrap
-  - name: hieradata_repo_token
   - name: gitlab_user_name
   - name: gitlab_api_token
   - name: commodore_cluster_id
@@ -500,7 +545,7 @@ steps:
     TF_VAR_control_vshn_net_token=${INPUT_control_vshn_api_token}
     GIT_AUTHOR_NAME=$(git config --global user.name)
     GIT_AUTHOR_EMAIL=$(git config --global user.email)
-    HIERADATA_REPO_TOKEN=${INPUT_hieradata_repo_token}
+    HIERADATA_REPO_TOKEN=${INPUT_gitlab_api_token}
     EOF
 
     tf_image=$(\
@@ -513,7 +558,10 @@ steps:
     echo "Using Terraform image: ${tf_image}:${tf_tag}"
 
     base_dir=$(pwd)
-    alias terraform='touch .terraformrc; docker run --rm -e REAL_UID=$(id -u) -e TF_CLI_CONFIG_FILE=/tf/.terraformrc --env-file ${base_dir}/terraform.env -w /tf -v $(pwd):/tf --ulimit memlock=-1 "${tf_image}:${tf_tag}" /tf/terraform.sh'
+    terraform() {
+      touch .terraformrc
+      docker run --rm -e REAL_UID="$(id -u)" -e TF_CLI_CONFIG_FILE=/tf/.terraformrc --env-file "${base_dir}/terraform.env" -w /tf -v "$(pwd):/tf" --ulimit memlock=-1 "${tf_image}:${tf_tag}" /tf/terraform.sh "${@}"
+    }
 
     gitlab_repository_url=$(curl -sH "Authorization: Bearer $(commodore fetch-token)" ${INPUT_commodore_api_url}/clusters/${INPUT_commodore_cluster_id} | jq -r '.gitRepo.url' | sed 's|ssh://||; s|/|:|')
     gitlab_repository_name=${gitlab_repository_url##*/}
@@ -580,7 +628,6 @@ steps:
   - name: cloudscale_token_floaty
   - name: control_vshn_api_token
   - name: ignition_bootstrap
-  - name: hieradata_repo_token
   - name: gitlab_user_name
   - name: gitlab_api_token
   - name: commodore_cluster_id
@@ -599,7 +646,7 @@ steps:
     TF_VAR_control_vshn_net_token=${INPUT_control_vshn_api_token}
     GIT_AUTHOR_NAME=$(git config --global user.name)
     GIT_AUTHOR_EMAIL=$(git config --global user.email)
-    HIERADATA_REPO_TOKEN=${INPUT_hieradata_repo_token}
+    HIERADATA_REPO_TOKEN=${INPUT_gitlab_api_token}
     EOF
 
     tf_image=$(\
@@ -612,7 +659,10 @@ steps:
     echo "Using Terraform image: ${tf_image}:${tf_tag}"
 
     base_dir=$(pwd)
-    alias terraform='touch .terraformrc; docker run --rm -e REAL_UID=$(id -u) -e TF_CLI_CONFIG_FILE=/tf/.terraformrc --env-file ${base_dir}/terraform.env -w /tf -v $(pwd):/tf --ulimit memlock=-1 "${tf_image}:${tf_tag}" /tf/terraform.sh'
+    terraform() {
+      touch .terraformrc
+      docker run --rm -e REAL_UID="$(id -u)" -e TF_CLI_CONFIG_FILE=/tf/.terraformrc --env-file "${base_dir}/terraform.env" -w /tf -v "$(pwd):/tf" --ulimit memlock=-1 "${tf_image}:${tf_tag}" /tf/terraform.sh "${@}"
+    }
 
     gitlab_repository_url=$(curl -sH "Authorization: Bearer $(commodore fetch-token)" ${INPUT_commodore_api_url}/clusters/${INPUT_commodore_cluster_id} | jq -r '.gitRepo.url' | sed 's|ssh://||; s|/|:|')
     gitlab_repository_name=${gitlab_repository_url##*/}
@@ -640,8 +690,10 @@ steps:
     yq eval -i '.parameters.openshift.cloudscale.ingress_floating_ip_v4 = "'"$INGRESS_FLOATING_IP"'"' \
       ${INPUT_commodore_cluster_id}.yml
 
-    if not git diff-index --quiet HEAD
+    if git diff-index --quiet HEAD
     then
+      echo "No changes, skipping commit"
+    else
       git commit -am "Configure cloudscale subnet UUID and ingress floating IP for ${INPUT_commodore_cluster_id}"
       git push origin master
     fi || true
@@ -664,7 +716,6 @@ steps:
   - name: cloudscale_token_floaty
   - name: control_vshn_api_token
   - name: ignition_bootstrap
-  - name: hieradata_repo_token
   - name: gitlab_user_name
   - name: gitlab_api_token
   - name: commodore_cluster_id
@@ -683,7 +734,7 @@ steps:
     TF_VAR_control_vshn_net_token=${INPUT_control_vshn_api_token}
     GIT_AUTHOR_NAME=$(git config --global user.name)
     GIT_AUTHOR_EMAIL=$(git config --global user.email)
-    HIERADATA_REPO_TOKEN=${INPUT_hieradata_repo_token}
+    HIERADATA_REPO_TOKEN=${INPUT_gitlab_api_token}
     EOF
 
     tf_image=$(\
@@ -696,7 +747,10 @@ steps:
     echo "Using Terraform image: ${tf_image}:${tf_tag}"
 
     base_dir=$(pwd)
-    alias terraform='touch .terraformrc; docker run --rm -e REAL_UID=$(id -u) -e TF_CLI_CONFIG_FILE=/tf/.terraformrc --env-file ${base_dir}/terraform.env -w /tf -v $(pwd):/tf --ulimit memlock=-1 "${tf_image}:${tf_tag}" /tf/terraform.sh'
+    terraform() {
+      touch .terraformrc
+      docker run --rm -e REAL_UID="$(id -u)" -e TF_CLI_CONFIG_FILE=/tf/.terraformrc --env-file "${base_dir}/terraform.env" -w /tf -v "$(pwd):/tf" --ulimit memlock=-1 "${tf_image}:${tf_tag}" /tf/terraform.sh "${@}"
+    }
 
     gitlab_repository_url=$(curl -sH "Authorization: Bearer $(commodore fetch-token)" ${INPUT_commodore_api_url}/clusters/${INPUT_commodore_cluster_id} | jq -r '.gitRepo.url' | sed 's|ssh://||; s|/|:|')
     gitlab_repository_name=${gitlab_repository_url##*/}
@@ -727,15 +781,14 @@ steps:
     echo "Running Terraform ..."
 
     terraform apply -auto-approve
-    dnstmp=$(mktemp)
-    terraform output -raw cluster_dns > "$dnstmp"
+    terraform output -raw cluster_dns > ../../../dns.txt
     echo "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@"
     echo "@                                                                                       @"
     echo "@  Please add the etcd DNS records shown in the Terraform output to your DNS provider.  @"
     echo "@  Most probably in https://git.vshn.net/vshn/vshn_zonefiles                            @"
     echo "@                                                                                       @"
     echo "@  If terminal selection does not work the entries can also be copied from              @"
-    echo "@    $dnstmp                                                                            @"
+    echo "@    dns.txt                                                                            @"
     echo "@                                                                                       @"
     echo "@  Waiting for record to propagate...                                                   @"
     echo "@                                                                                       @"
@@ -744,7 +797,7 @@ steps:
     do
       sleep 15
     done
-    rm -f "$dnstmp"
+    rm ../../../dns.txt
 
     export KUBECONFIG="${INPUT_kubeconfig_path}"
 
@@ -824,7 +877,6 @@ steps:
   - name: cloudscale_token_floaty
   - name: control_vshn_api_token
   - name: ignition_bootstrap
-  - name: hieradata_repo_token
   - name: gitlab_user_name
   - name: gitlab_api_token
   - name: commodore_cluster_id
@@ -843,7 +895,7 @@ steps:
     TF_VAR_control_vshn_net_token=${INPUT_control_vshn_api_token}
     GIT_AUTHOR_NAME=$(git config --global user.name)
     GIT_AUTHOR_EMAIL=$(git config --global user.email)
-    HIERADATA_REPO_TOKEN=${INPUT_hieradata_repo_token}
+    HIERADATA_REPO_TOKEN=${INPUT_gitlab_api_token}
     EOF
 
     tf_image=$(\
@@ -856,7 +908,10 @@ steps:
     echo "Using Terraform image: ${tf_image}:${tf_tag}"
 
     base_dir=$(pwd)
-    alias terraform='touch .terraformrc; docker run --rm -e REAL_UID=$(id -u) -e TF_CLI_CONFIG_FILE=/tf/.terraformrc --env-file ${base_dir}/terraform.env -w /tf -v $(pwd):/tf --ulimit memlock=-1 "${tf_image}:${tf_tag}" /tf/terraform.sh'
+    terraform() {
+      touch .terraformrc
+      docker run --rm -e REAL_UID="$(id -u)" -e TF_CLI_CONFIG_FILE=/tf/.terraformrc --env-file "${base_dir}/terraform.env" -w /tf -v "$(pwd):/tf" --ulimit memlock=-1 "${tf_image}:${tf_tag}" /tf/terraform.sh "${@}"
+    }
 
     gitlab_repository_url=$(curl -sH "Authorization: Bearer $(commodore fetch-token)" ${INPUT_commodore_api_url}/clusters/${INPUT_commodore_cluster_id} | jq -r '.gitRepo.url' | sed 's|ssh://||; s|/|:|')
     gitlab_repository_name=${gitlab_repository_url##*/}

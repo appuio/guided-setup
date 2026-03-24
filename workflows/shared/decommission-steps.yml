@@ -78,22 +78,6 @@ steps:
     kubectl wait --for=delete pod -lcontrol-plane=argocd-operator --timeout=60s -nsyn-argocd-operator
     kubectl -n syn scale sts syn-argocd-application-controller --replicas 0
     kubectl wait --for=delete pod -lapp.kubernetes.io/name=syn-argocd-application-controller --timeout=60s -nsyn
-- match: And I delete all Load Balancer services and Load Balancers
-  description: |-
-    This step deletes all services of type LoadBalancer from the cluster.
-    It then deletes all LoadBalancer instances as well, so that the
-    corresponding Cloudscale resources can be decommissioned by the controller.
-  inputs:
-  - name: kubeconfig_path
-  run: |
-    set -euo pipefail
-    export KUBECONFIG="${INPUT_kubeconfig_path}"
-    echo '#  Deleting Services ...  #'
-    kubectl delete svc --field-selector spec.type=LoadBalancer -A
-    echo '#  Deleted Services.  #'
-    echo '#  Deleting LoadBalancers ...  #'
-    kubectl delete loadbalancers -A --all
-    echo '#  Deleted LoadBalancers.  #'
 - match: And I disable machine autoscaling
   description: |-
     This step disables autoscaling of machinesets.
@@ -237,8 +221,10 @@ steps:
     git rm "${INPUT_lb_fqdn_1}.yaml" || true
     git rm "${INPUT_lb_fqdn_2}.yaml" || true
 
-    if not git diff-index --quiet HEAD
+    if git diff-index --quiet HEAD
     then
+      echo "No changes, skipping commit"
+    else
       git commit -m"Decommission LBs for ${INPUT_commodore_cluster_id}"
       git push origin master
     fi || true
@@ -256,8 +242,10 @@ steps:
 
     git rm -rf "lbaas/${INPUT_commodore_cluster_id}"* || true
 
-    if not git diff-index --quiet HEAD
+    if git diff-index --quiet HEAD
     then
+      echo "No changes, skipping commit"
+    else
       git commit -m"Decommission ${INPUT_commodore_cluster_id}"
       git push origin master
     fi || true
@@ -417,8 +405,10 @@ steps:
 
     git rm -rf "${INPUT_commodore_cluster_id}" || true
 
-    if not git diff-index --quiet HEAD
+    if git diff-index --quiet HEAD
     then
+      echo "No changes, skipping commit"
+    else
       git checkout -b "remove-${INPUT_commodore_cluster_id}"
       git commit -m"Remove ${INPUT_commodore_cluster_id}"
       git push origin "remove-${INPUT_commodore_cluster_id}"

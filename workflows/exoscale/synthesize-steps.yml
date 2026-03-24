@@ -25,9 +25,9 @@ steps:
     export KUBECONFIG="${INPUT_kubeconfig_path}"
 
     echo '# Waiting for cert-manager namespace ...'
-    kubectl wait --for=create ns/syn-cert-manager
+    kubectl wait --for=create ns/syn-cert-manager --timeout 5m
     echo '# Waiting for cert-manager secret ...'
-    kubectl wait --for=create secret/acme-dns-client -nsyn-cert-manager
+    kubectl wait --for=create secret/acme-dns-client -nsyn-cert-manager --timeout 10m
 
     fulldomain=""
 

@@ -22,13 +22,38 @@ steps:
       exo storage create "sos://${INPUT_commodore_cluster_id}-logstore" --zone "${INPUT_csp_region}"
     fi
 
+- match: And I patch the OpenShift image
+  description: |-
+    In this step you need to modify the OpenShift image to make it work with exoscale.
+  inputs:
+  - name: image_path
+  outputs:
+  - name: patched_image_path
+  run: |
+    set -euo pipefail
+
+    patched_path="${INPUT_image_path%.*}-patched.qcow2"
+    cp "${INPUT_image_path}" "${patched_path}"
+    env -i "patched_image_path=$patched_path" >> "$OUTPUT"
+
+    echo "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@"
+    echo "@                                                                                       @"
+    echo "@  Please run the following command manually. (This step is not yet automated)          @"
+    echo "@                                                                                       @"
+    echo "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@"
+    echo
+    echo "sudo virt-edit -a ${patched_path} -m /dev/sda3:/ /loader/entries/ostree-1.conf -e 's/openstack/exoscale/'"
+    echo
+    echo '(If you have some time, feel free to implement automation for this step)'
+    sleep 3
+
 - match: And I import the image in Exoscale
   description: |-
-    This step modifies and uploads the Red Hat CoreOS image to the S3 bucket for the image registry.
+    This step uploads the Red Hat CoreOS image to the S3 bucket for the image registry.
 
     It then imports the image into Exoscale as a custom image.
   inputs:
-  - name: image_path
+  - name: patched_image_path
   - name: commodore_cluster_id
   - name: csp_region
   - name: image_major
@@ -42,8 +67,6 @@ steps:
   run: |
     set -euo pipefail
 
-    exo_path="${INPUT_image_path%%.qcow2}"
-
     export EXOSCALE_API_KEY="${INPUT_exoscale_key}"
     export EXOSCALE_API_SECRET="${INPUT_exoscale_secret}"
 
@@ -56,21 +79,15 @@ steps:
       env -i "rhcos_template=$slug" >> "$OUTPUT"
       exit 0
     fi
-
-    # TODO: The virt-edit approach will NOT work with guided-setup. We need an alternative.
-    # exit 1
-    # sudo virt-edit -a "${INPUT_image_path}" \
-    #   -m /dev/sda3:/ /loader/entries/ostree-1.conf \
-    #   -e 's/openstack/exoscale/'
     
 
-    exo storage upload "${INPUT_image_path}" "sos://${INPUT_commodore_cluster_id}-bootstrap" --acl public-read
+    exo storage upload "${INPUT_patched_image_path}" "sos://${INPUT_commodore_cluster_id}-bootstrap" --acl public-read
 
     sleep 3
 
     exo compute instance-template register "rhcos-${RHCOS_VERSION}" \
       "https://${INPUT_exoscale_s3_endpoint}/${INPUT_commodore_cluster_id}-bootstrap/rhcos-${RHCOS_VERSION}.qcow2" \
-      "$(md5sum ${INPUT_image_path} | awk '{ print $1 }')" \
+      "$(md5sum ${INPUT_patched_image_path} | awk '{ print $1 }')" \
       --zone "${INPUT_csp_region}" \
       --boot-mode uefi \
       --disable-password \

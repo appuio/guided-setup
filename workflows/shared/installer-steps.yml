@@ -8,10 +8,12 @@ steps:
   run: |
     set -euo pipefail
 
-    shopt -s expand_aliases
+    openshift-install() {
+      ./openshift-install "${@}"
+    }
+
     if [[ -f openshift-install ]]
     then
-      alias openshift-install='./openshift-install'
       echo "Found existing openshift-install binary, checking version ..."
       INSTALLED_VERSION=$(openshift-install version | sed -E -n '/openshift-install/s/^[^ ]+ v?//;s/\.[0-9]{1,2}$//p')
       if [ "$INSTALLED_VERSION" = "$MATCH_ocp_version" ]; then

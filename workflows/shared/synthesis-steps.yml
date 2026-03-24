@@ -35,6 +35,7 @@ steps:
 
     echo "# Waiting for ArgoCD resource to exist ..."
     kubectl wait --for=create crds/argocds.argoproj.io --timeout=5m
+    sleep 1 # to prevent race conditions
 
     echo "# Waiting for ArgoCD instance to exist ..."
     kubectl wait --for=create argocd/syn-argocd -nsyn --timeout=90s
@@ -96,6 +97,7 @@ steps:
     set -euo pipefail
     export KUBECONFIG="${INPUT_kubeconfig_path}"
 
+    kubectl wait --for create --timeout=10m -n openshift-monitoring cronjob silence
     echo '# Installing default alert silence ...'
     oc --as=system:admin -n openshift-monitoring get job silence-manual &>/dev/null || \
       oc --as=system:admin -n openshift-monitoring create job --from=cronjob/silence silence-manual

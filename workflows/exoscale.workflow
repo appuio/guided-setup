@@ -1,5 +1,5 @@
 Given I have all prerequisites installed
-And I have the `openshift-install` binary for version "4.20"
+And I download the `openshift-install` binary for version "4.20"
 And a lieutenant cluster
 And a Keycloak service
 And Exoscale API tokens
@@ -10,6 +10,7 @@ Then I check the Exoscale resource quotas
 Then I create the necessary Exoscale IAM keys
 And I set up required S3 buckets
 Then I download the OpenShift image for version "4.20.0"
+And I patch the OpenShift image
 And I import the image in Exoscale
 Then I set secrets in Vault
 And I check the cluster domain
