@@ -53,7 +53,7 @@ steps:
     Create 2 new cloudscale API tokens with read+write permissions and name them
     <cluster_id> and <cluster_id>_floaty on control.cloudscale.ch/service/<your-project>/api-token.
 
-    This step currently does not validate whether the tokens have read permission.
+    This step currently does not validate whether the tokens have write permission.
   run: |
     set -euo pipefail
     if [[ $( curl -sH "Authorization: Bearer ${INPUT_cloudscale_token}" https://api.cloudscale.ch/v1/flavors -o /dev/null -w"%{http_code}" ) != 200 ]]
