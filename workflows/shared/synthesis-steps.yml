@@ -35,6 +35,7 @@ steps:
 
     echo "# Waiting for ArgoCD resource to exist ..."
     kubectl wait --for=create crds/argocds.argoproj.io --timeout=5m
+    kubectl api-resources --api-group=argoproj.io # to refresh local K8s API cache
     sleep 1 # to prevent race conditions
 
     echo "# Waiting for ArgoCD instance to exist ..."

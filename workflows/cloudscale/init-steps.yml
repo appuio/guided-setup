@@ -53,7 +53,7 @@ steps:
     Create 2 new cloudscale API tokens with read+write permissions and name them
     <cluster_id> and <cluster_id>_floaty on control.cloudscale.ch/service/<your-project>/api-token.
 
-    This step currently does not validate whether the tokens have read permission.
+    This step currently does not validate whether the tokens have write permission.
   run: |
     set -euo pipefail
     if [[ $( curl -sH "Authorization: Bearer ${INPUT_cloudscale_token}" https://api.cloudscale.ch/v1/flavors -o /dev/null -w"%{http_code}" ) != 200 ]]
@@ -365,7 +365,7 @@ steps:
       ${INPUT_commodore_cluster_id}.yml
 
     echo "Commit changes"
-    git commit -a -m "Set Exoscale specific values in cluster ${CLUSTER_ID}"
+    git commit -a -m "Set cloudscale specific values in cluster ${CLUSTER_ID}"
     git push
 
     popd
@@ -859,8 +859,11 @@ steps:
       sleep 20
     done
     echo "Waiting for load balancer to become available ..."
+    # NOTE(sg): We need to wait for at least one app node to become ready
+    # before the cloudscale LB controller can be scheduled. This can take 5+
+    # minutes, depending on how quickly the worker nodes are becoming ready.
     kubectl -n appuio-cloudscale-loadbalancer-controller \
-      wait --for condition=available --timeout 3m \
+      wait --for condition=available --timeout 10m \
       deploy cloudscale-loadbalancer-controller-controller-manager
     echo '# Applied loadbalancer controller. #'
     echo
@@ -957,9 +960,9 @@ steps:
 - match: And I configure initial deployments
   description: |-
     This step configures some deployments that require manual changes after
-    cluster bootstrap, such as reverting the Cilium patch from earlier, enabling
-    proxy protocol on the Ingress controller, and scheduling the ingress
-    controller on the infrastructure nodes.
+    cluster bootstrap, such as enabling proxy protocol on the Ingress
+    controller, and scheduling the ingress controller on the infrastructure
+    nodes.
   inputs:
   - name: commodore_cluster_id
   - name: commodore_api_url

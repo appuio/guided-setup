@@ -171,8 +171,8 @@ steps:
     echo
     echo "Run the following:"
     echo "cd $(pwd)/openshift4-clusters/${INPUT_commodore_cluster_id}"
-    echo "direnv allow"
-    echo "oc whoami"
+    echo "direnv allow ."
+    echo "direnv exec . oc whoami"
     echo "git push origin main   # only if everything is OK"
     sleep 2
 - match: And I wait for maintenance to complete
