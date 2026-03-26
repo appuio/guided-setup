@@ -365,7 +365,7 @@ steps:
       ${INPUT_commodore_cluster_id}.yml
 
     echo "Commit changes"
-    git commit -a -m "Set Exoscale specific values in cluster ${CLUSTER_ID}"
+    git commit -a -m "Set cloudscale specific values in cluster ${CLUSTER_ID}"
     git push
 
     popd
