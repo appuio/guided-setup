@@ -859,8 +859,11 @@ steps:
       sleep 20
     done
     echo "Waiting for load balancer to become available ..."
+    # NOTE(sg): We need to wait for at least one app node to become ready
+    # before the cloudscale LB controller can be scheduled. This can take 5+
+    # minutes, depending on how quickly the worker nodes are becoming ready.
     kubectl -n appuio-cloudscale-loadbalancer-controller \
-      wait --for condition=available --timeout 3m \
+      wait --for condition=available --timeout 10m \
       deploy cloudscale-loadbalancer-controller-controller-manager
     echo '# Applied loadbalancer controller. #'
     echo
