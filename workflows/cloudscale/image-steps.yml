@@ -93,11 +93,20 @@ steps:
 
 
     auth_header="Authorization: Bearer ${INPUT_cloudscale_token}"
+    image_slug="rhcos-${INPUT_image_major}.${INPUT_image_minor}"
+    existing_zone=
 
-    slug=$(curl -sH "$auth_header" https://api.cloudscale.ch/v1/custom-images | jq -r ".[] | select(.slug == \"rhcos-${INPUT_image_major}.${INPUT_image_minor}\") | .zones[].slug")
-    if [ -n "$slug" ] && [ "$slug" != "null" ]; then
-      echo "Image 'rhcos-${INPUT_image_major}.${INPUT_image_minor}' already exists in Cloudscale, skipping upload."
+    # NOTE(sg): The value of zones is a space-separated list of zones where
+    # the image with the given slug exists or the empty string if the image
+    # doesn't exist in any zone.
+    zones=$(curl -sH "$auth_header" https://api.cloudscale.ch/v1/custom-images | \
+      jq --arg slug "$image_slug" -r '.[] | select(.slug == $slug) | [.zones[]|.slug]|join(" ")')
+    if [ -n "$zones" ] && [[ "$zones" == *"${INPUT_csp_region}1"* ]]; then
+      echo "Image '$image_slug' already exists in Cloudscale ${INPUT_csp_region}, skipping upload."
       exit 0
+    elif [ -n "$zones" ]; then
+      echo "Image 'rhcos-${INPUT_image_major}.${INPUT_image_minor}' already exists in Cloudscale ${zones}, configuring multi-zone image upload"
+      existing_zone="-Fzones=${zones}"
     fi
 
     mc alias set \
@@ -116,7 +125,7 @@ steps:
     curl -i -H "$auth_header" \
       -F url="$(mc share download --json "${INPUT_commodore_cluster_id}/${INPUT_commodore_cluster_id}-bootstrap-ignition/rhcos-${INPUT_image_major}.${INPUT_image_minor}.qcow2" | jq -r .url)" \
       -F name="RHCOS ${INPUT_image_major}.${INPUT_image_minor}" \
-      -F zones="${INPUT_csp_region}1" \
+      -F zones="${INPUT_csp_region}1" "${existing_zone}" \
       -F slug="rhcos-${INPUT_image_major}.${INPUT_image_minor}" \
       -F source_format=qcow2 \
       -F user_data_handling=pass-through \
