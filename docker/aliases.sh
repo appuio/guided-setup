@@ -1,12 +1,16 @@
 guided-setup-base() {
-  local OPTIND opt extra_volume extra_groups docker_group docker_path sshop_volumes ecr_volume
+  local OPTIND opt extra_env extra_volume extra_groups docker_group docker_path sshop_volumes ecr_volume
+  extra_env=()
   extra_volume=()
   sshop_volumes=()
   ecr_volume=()
-  while getopts 'h?v:' opt; do
+  while getopts 'h?v:e:' opt; do
       case "$opt" in
       h|\?)
-          echo "usage: $0 [-y] [-v EXTRA_VOLUME_MOUNT]"
+          echo "usage: $0 [-y] [-v EXTRA_VOLUME_MOUNT] [-e EXTRA_ENV_VAR]"
+          ;;
+      e)
+          extra_env=(--env "$OPTARG")
           ;;
       v)
           extra_volume=(--volume "$OPTARG")
@@ -69,6 +73,7 @@ guided-setup-base() {
     "${sshop_volumes[@]}" \
     "${ecr_volume[@]}" \
     "${extra_volume[@]}" \
+    "${extra_env[@]}" \
     "${gpg_opts[@]}" \
     --volume "${PWD}:${PWD}" \
     --workdir "${PWD}" \
