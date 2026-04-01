@@ -64,7 +64,7 @@ RUN \
       kubectl
 
 # mikefarah/yq
-COPY --from=docker.io/mikefarah/yq:4.52.4 /usr/bin/yq /usr/local/bin/yq
+COPY --from=docker.io/mikefarah/yq:4.52.5 /usr/bin/yq /usr/local/bin/yq
 
 # glab
 # renovate: datasource=gitlab-releases depName=gitlab-org/cli registryUrl=https://gitlab.com
