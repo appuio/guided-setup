@@ -41,9 +41,11 @@ steps:
     export KUBECONFIG="${INPUT_kubeconfig_path}"
     echo '#  Deleting Services ...  #'
     kubectl delete svc --field-selector spec.type=LoadBalancer -A
+    kubectl wait --for=delete svc --field-selector spec.type=LoadBalancer -A --timeout=120s
     echo '#  Deleted Services.  #'
     echo '#  Deleting LoadBalancers ...  #'
     kubectl delete loadbalancers -A --all
+    kubectl wait --for=delete loadbalancers -A --all --timeout=120s
     echo '#  Deleted LoadBalancers.  #'
 - match: Then I save the loadbalancer metadata
   description: |-
