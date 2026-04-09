@@ -10,10 +10,10 @@ guided-setup-base() {
           echo "usage: $0 [-y] [-v EXTRA_VOLUME_MOUNT] [-e EXTRA_ENV_VAR]"
           ;;
       e)
-          extra_env=(--env "$OPTARG")
+          extra_env+=(--env "$OPTARG")
           ;;
       v)
-          extra_volume=(--volume "$OPTARG")
+          extra_volume+=(--volume "$OPTARG")
           ;;
       esac
   done
