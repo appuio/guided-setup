@@ -41,9 +41,11 @@ steps:
     export KUBECONFIG="${INPUT_kubeconfig_path}"
     echo '#  Deleting Services ...  #'
     kubectl delete svc --field-selector spec.type=LoadBalancer -A
+    kubectl wait --for=delete svc --field-selector spec.type=LoadBalancer -A --timeout=120s
     echo '#  Deleted Services.  #'
     echo '#  Deleting LoadBalancers ...  #'
     kubectl delete loadbalancers -A --all
+    kubectl wait --for=delete loadbalancers -A --all --timeout=120s
     echo '#  Deleted LoadBalancers.  #'
 - match: Then I save the loadbalancer metadata
   description: |-
@@ -239,7 +241,7 @@ steps:
       "$(echo "$response" | jq -r '.keys[0].secret_key')"
 
     # delete bootstrap-ignition bucket (should already be deleted after setup)
-    mc rb "${INPUT_commodore_cluster_id}/${INPUT_commodore_cluster_id}-bootstrap-ignition" --force
+    mc rb "${INPUT_commodore_cluster_id}/${INPUT_commodore_cluster_id}-bootstrap-ignition" --force || true
 
     # delete image-registry bucket
     mc rb "${INPUT_commodore_cluster_id}/${INPUT_commodore_cluster_id}-image-registry" --force
@@ -343,6 +345,7 @@ steps:
     mc rb "${INPUT_commodore_cluster_id}_backup/${INPUT_commodore_cluster_id}-cluster-backup" --force
 
     # Delete object user
+    echo "Deleting object user ..."
     curl -i -H "Authorization: Bearer ${INPUT_cloudscale_token}" -X DELETE "$(echo "$response" | jq -r '.href')"
 
 - match: And I delete the cluster's API tokens
