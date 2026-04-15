@@ -26,6 +26,11 @@ guided-setup-base() {
     gpg_opts=()
   fi
 
+  if [[ -f "${HOME}/.gandalf/env" ]]
+  then
+    extra_env+=(--env-file "${HOME}/.gandalf/env")
+  fi
+
   docker_group="$( getent group docker | cut --delimiter ':' --fields 3 )"
   docker_path=${DOCKER_HOST:-/var/run/docker.sock}
 
