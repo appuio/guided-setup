@@ -75,12 +75,14 @@ steps:
     This step currently does not validate the token's scope.
   inputs:
   - name: gitlab_api_token
+    type: local-sensitive
     description: |-
       Personal access token for VSHN GitLab with the "api" scope.
 
       Create the token at https://git.vshn.net/-/user_settings/personal_access_tokens with the "api" scope.
   outputs:
   - name: gitlab_user_name
+    type: local
     description: |-
       Your GitLab user name.
   run: |
@@ -100,6 +102,7 @@ steps:
     Create the token at https://control.vshn.net/tokens/_create/servers and ensure your IP is allowlisted.
   inputs:
   - name: control_vshn_api_token
+    type: local-sensitive
     description: |-
       API token for control.vshn.net Servers API.
 

@@ -5,6 +5,7 @@ steps:
   inputs:
   - name: exoscale_key
   - name: exoscale_secret
+    type: sensitive
   - name: commodore_cluster_id
   - name: commodore_api_url
   - name: csp_region

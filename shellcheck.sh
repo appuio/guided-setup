@@ -32,7 +32,9 @@ do
     else
         for element_index in $( seq 0 "$array_length" );do
             step="$( yq e ".steps[$element_index].match" "$stepfile" )"
-            yq e ".steps[$element_index].inputs[] | \"INPUT_\(.name)=foo\"" "$stepfile" | grep -v "INPUT_=foo" > "$script"
+	    echo '# shellcheck disable=2034' > "$script"
+            echo "GANDALF_STEPFILE_DIR=baz" >> "$script"
+            yq e ".steps[$element_index].inputs[] | \"INPUT_\(.name)=foo\"" "$stepfile" | grep -v "INPUT_=foo" >> "$script"
             echo "$step" | grep -oP '\?P<(.+?)>' | sed -nE 's#\?P<(.+)>#MATCH_\1=bar#p' >> "$script"
             yq e ".steps[$element_index].run" "$stepfile" >> "$script"
             if $verbose

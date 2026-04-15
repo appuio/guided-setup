@@ -5,9 +5,13 @@ steps:
   inputs:
   - name: exoscale_key
   - name: exoscale_secret
+    type: sensitive
   - name: control_vshn_api_token
+    type: local-sensitive
   - name: gitlab_user_name
+    type: local
   - name: gitlab_api_token
+    type: local-sensitive
   - name: commodore_cluster_id
   - name: commodore_api_url
   - name: rhcos_template

@@ -54,6 +54,7 @@ steps:
   - name: cluster_domain
   - name: commodore_cluster_id
   - name: passbolt_passphrase
+    type: local-sensitive
     description: |-
       Your password for Passbolt.
 

@@ -10,6 +10,7 @@ steps:
   - name: csp_region
   outputs:
   - name: bucket_user
+    type: sensitive
   run: |
     set -euo pipefail
 
