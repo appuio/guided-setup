@@ -1,4 +1,4 @@
-steps:
+spells:
 - match: And I have emergency cluster access
   description: |-
     This step ensures the emergency credentials for the cluster have been retrieved

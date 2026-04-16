@@ -1,4 +1,4 @@
-steps:
+spells:
 - match: Then I set acme-dns CNAME records
   description: |-
     This step ensures CNAME records exist for ACME challenges once cert-manager is properly deployed.

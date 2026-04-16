@@ -1,4 +1,4 @@
-steps:
+spells:
 - match: Then I save the loadbalancer metadata
   description: |-
     This step gathers metadata on the LoadBalancer instances (such as their icinga zone and backup server), such that they can be properly decommissioned down the line.

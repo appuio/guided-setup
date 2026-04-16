@@ -1,4 +1,4 @@
-steps:
+spells:
 - match: Then I download the OpenShift image for version "(?P<image_name>[^"]+)"
   description: |-
     This step downloads the OpenShift image for the version specified by in the step.
@@ -13,7 +13,7 @@ steps:
     set -euo pipefail
 
     # shellcheck disable=1091
-    . "$GANDALF_STEPFILE_DIR"/scripts/semver.sh
+    . "$GANDALF_SPELLBOOK_DIR"/scripts/semver.sh
 
     MAJOR=0
     MINOR=0

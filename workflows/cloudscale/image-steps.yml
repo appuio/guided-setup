@@ -1,4 +1,4 @@
-steps:
+spells:
 - match: And I set up required S3 buckets
   description: |-
     This step sets up the required S3 buckets for the OpenShift cluster installation.

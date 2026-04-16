@@ -1,4 +1,4 @@
-steps:
+spells:
 - match: Then I synthesize the cluster
   description: |-
     This step enables Project Syn on the cluster.

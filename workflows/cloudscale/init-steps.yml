@@ -1,4 +1,4 @@
-steps:
+spells:
 - match: Given I have all prerequisites installed
   description: |-
     This step checks if all necessary prerequisites are installed on your system,

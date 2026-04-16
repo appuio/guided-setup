@@ -1,4 +1,4 @@
-steps:
+spells:
 - match: And I have the cluster's Cloudscale tokens
   description: |-
     This step fetches the cluster's Cloudscale token and Floaty token from Vault.

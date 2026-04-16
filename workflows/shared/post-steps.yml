@@ -1,4 +1,4 @@
-steps:
+spells:
 - match: Then I configure apt-dater groups for the LoadBalancers
   description: |-
     This step configures the apt-dater groups for the LoadBalancers via puppet.

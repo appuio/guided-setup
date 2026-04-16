@@ -1,4 +1,4 @@
-steps:
+spells:
 - match: Given a Cloudplosion organization
   outputs:
   - name: cloudplosion_org_id
