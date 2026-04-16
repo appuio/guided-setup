@@ -26,9 +26,10 @@ guided-setup-base() {
     gpg_opts=()
   fi
 
-  if [[ -f "${HOME}/.gandalf/env" ]]
+  readonly GANDALF_CONFIG="${XDG_CONFIG_HOME:-~/.config}/gandalf"
+  if [[ -f "${GANDALF_CONFIG}/env" ]]
   then
-    extra_env+=(--env-file "${HOME}/.gandalf/env")
+    extra_env+=(--env-file "${GANDALF_CONFIG}/env")
   fi
 
   docker_group="$( getent group docker | cut --delimiter ':' --fields 3 )"
