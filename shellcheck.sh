@@ -32,8 +32,9 @@ do
     else
         for element_index in $( seq 0 "$array_length" );do
             spell="$( yq e ".spells[$element_index].match" "$spellbook" )"
-	    echo '# shellcheck disable=2034' > "$script"
-            echo "GANDALF_SPELLBOOK_DIR=baz" >> "$script"
+            echo '# shellcheck disable=2034' > "$script"
+            spellbook_dir="$(dirname "$(realpath "$spellbook")")"
+            echo "GANDALF_SPELLBOOK_DIR=${spellbook_dir}" >> "$script"
             yq e ".spells[$element_index].inputs[] | \"INPUT_\(.name)=foo\"" "$spellbook" | grep -v "INPUT_=foo" >> "$script"
             echo "$spell" | grep -oP '\?P<(.+?)>' | sed -nE 's#\?P<(.+)>#MATCH_\1=bar#p' >> "$script"
             yq e ".spells[$element_index].run" "$spellbook" >> "$script"
@@ -45,7 +46,7 @@ do
                 echo "### SPELL: $spell"
                 echo "###################################"
             fi
-            shellcheck -s bash "$script" -e 2129 -e 2002
+            shellcheck -xP "${spellbook_dir}" -s bash "$script" -e 2129 -e 2002
             ret=$?
             errors_found="$(( errors_found + ret ))"
             if (( ret != 0 )) && ! $verbose

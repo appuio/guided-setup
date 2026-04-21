@@ -12,13 +12,11 @@ spells:
   run: |
     set -euo pipefail
 
-    # shellcheck disable=1091
     . "$GANDALF_SPELLBOOK_DIR"/scripts/semver.sh
 
     MAJOR=0
     MINOR=0
     PATCH=0
-    # shellcheck disable=2034
     SPECIAL=""
     semverParseInto "$MATCH_image_name" MAJOR MINOR PATCH SPECIAL
 
