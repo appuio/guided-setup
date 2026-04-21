@@ -1,5 +1,6 @@
 spells:
 - match: (?:Then |)I upload the kubernetes "(?P<image_name>[^"]+)" image
+  description: This step uploads the kubernetes image to Cloudplosion organization {{ .cloudplosion_org_id }}.
   inputs:
   - name: cloudplosion_org_id
   outputs:
