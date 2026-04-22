@@ -1,4 +1,4 @@
-steps:
+spells:
 - match: Then I synthesize the cluster
   description: |-
     This step enables Project Syn on the cluster.
@@ -54,6 +54,7 @@ steps:
   - name: cluster_domain
   - name: commodore_cluster_id
   - name: passbolt_passphrase
+    type: local-sensitive
     description: |-
       Your password for Passbolt.
 

@@ -1,10 +1,11 @@
-steps:
+spells:
 - match: And I set up required S3 buckets
   description: |-
     This step sets up the required S3 buckets for the OpenShift cluster installation.
   inputs:
   - name: exoscale_key
   - name: exoscale_secret
+    type: sensitive
   - name: commodore_cluster_id
   - name: commodore_api_url
   - name: csp_region

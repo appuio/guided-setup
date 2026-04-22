@@ -1,4 +1,4 @@
-steps:
+spells:
 - match: And I have the cluster's Cloudscale tokens
   description: |-
     This step fetches the cluster's Cloudscale token and Floaty token from Vault.
@@ -13,7 +13,9 @@ steps:
   - name: commodore_tenant_id
   outputs:
   - name: cloudscale_token
+    type: sensitive
   - name: cloudscale_token_floaty
+    type: sensitive
   run: |
     set -euo pipefail
     export VAULT_ADDR=${INPUT_vault_address}

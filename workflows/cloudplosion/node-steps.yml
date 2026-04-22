@@ -1,4 +1,4 @@
-steps:
+spells:
 - match: (?i)And create the bootstrap node
   inputs:
   - name: cloudplosion_org_id

@@ -1,4 +1,4 @@
-steps:
+spells:
 - match: Given I have all prerequisites installed
   description: |-
     This step checks if all necessary prerequisites are installed on your system,
@@ -53,6 +53,7 @@ steps:
 
       Used for setting up or tearing down the cluster with terraform
   - name: exoscale_secret
+    type: sensitive
     description: |-
       Exoscale API secret
 
@@ -117,10 +118,13 @@ steps:
   outputs:
   - name: s3_key
   - name: s3_secret
+    type: sensitive
   - name: csi_key
   - name: csi_secret
+    type: sensitive
   - name: ccm_key
   - name: ccm_secret
+    type: sensitive
   run: |
     set -euo pipefail
     export EXOSCALE_API_KEY="${INPUT_exoscale_key}"
@@ -485,7 +489,7 @@ steps:
 
 - match: And I configure Terraform for Exoscale
   description: |-
-    Review the file ./inventory/classes/${INPUT_commodore_tenant_id}/${INPUT_commodore_cluster_id}.yml. 
+    Review the file ./inventory/classes/{{ .commodore_tenant_id }}/{{ .commodore_cluster_id }}.yml.
     Override default parameters or add more component configurations as required for your cluster. 
     
     Then press enter to commit and compile.

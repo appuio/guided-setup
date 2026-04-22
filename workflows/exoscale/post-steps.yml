@@ -1,4 +1,4 @@
-steps:
+spells:
 - match: And I remove the bootstrap bucket
   description: |-
     This step deletes the S3 bucket with the bootstrap ignition config.

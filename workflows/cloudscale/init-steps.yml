@@ -1,4 +1,4 @@
-steps:
+spells:
 - match: Given I have all prerequisites installed
   description: |-
     This step checks if all necessary prerequisites are installed on your system,
@@ -40,18 +40,20 @@ steps:
 - match: And Cloudscale API tokens
   inputs:
   - name: cloudscale_token
+    type: sensitive
     description: |-
       Cloudscale API token with read+write permissions.
 
       Used for setting up the cluster and for the machine api provider.
   - name: cloudscale_token_floaty
+    type: sensitive
     description: |-
       Cloudscale API token with read+write permissions.
 
       Used for managing the floating IPs.
   description: |-
     Create 2 new cloudscale API tokens with read+write permissions and name them
-    <cluster_id> and <cluster_id>_floaty on control.cloudscale.ch/service/<your-project>/api-token.
+    {{ .commodore_cluster_id }} and {{ .commodore_cluster_id }}_floaty on control.cloudscale.ch/service/<your-project>/api-token.
 
     This step currently does not validate whether the tokens have write permission.
   run: |
@@ -76,11 +78,13 @@ steps:
   - name: commodore_cluster_id
   - name: commodore_tenant_id
   - name: bucket_user
+    type: sensitive
   - name: cloudscale_token
   - name: cloudscale_token_floaty
   outputs:
   - name: hieradata_repo_user
   - name: hieradata_repo_token
+    type: sensitive
   run: |
     set -euo pipefail
 
@@ -338,7 +342,7 @@ steps:
     echo "✅ OpenShift installer configured successfully."
 - match: And I configure Terraform for Cloudscale
   description: |-
-    Review the file ./inventory/classes/${INPUT_commodore_tenant_id}/${INPUT_commodore_cluster_id}.yml.
+    Review the file ./inventory/classes/{{ .commodore_tenant_id }}/{{ .commodore_cluster_id }}.yml.
     Override default parameters or add more component configurations as required for your cluster.
 
     Then press enter to commit and compile.

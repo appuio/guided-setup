@@ -1,4 +1,4 @@
-steps:
+spells:
 - match: And I download the `openshift-install` binary for version "(?P<ocp_version>[^"]+)"
   description: |-
     This step downloads the `openshift-install` binary for the specified OpenShift version.
