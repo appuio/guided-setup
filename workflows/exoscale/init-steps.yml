@@ -231,8 +231,7 @@ spells:
   - name: vault_address
     description: |-
       Address of the Vault server associated with the Lieutenant API to store cluster secrets.
-
-      https://vault-prod.syn.vshn.net/ for production clusters.
+  - name: vault_login_method
   - name: commodore_cluster_id
   - name: commodore_tenant_id
   - name: s3_key
@@ -249,7 +248,7 @@ spells:
     set -euo pipefail
 
     export VAULT_ADDR=${INPUT_vault_address}
-    vault login -method=oidc
+    vault login -method=${INPUT_vault_login_method}
 
     # Set the Exoscale object storage API key
     vault kv put clusters/kv/${INPUT_commodore_tenant_id}/${INPUT_commodore_cluster_id}/exoscale/storage_iam \
@@ -353,6 +352,7 @@ spells:
   - name: base_domain
   - name: cluster_domain
   - name: vault_address
+  - name: vault_login_method
   - name: redhat_pull_secret
   - name: ccm_key
   - name: ccm_secret
@@ -370,7 +370,7 @@ spells:
     }
 
     export VAULT_ADDR="${INPUT_vault_address}"
-    vault login -method=oidc
+    vault login -method="${INPUT_vault_login_method}"
 
     ssh_private_key="$(pwd)/ssh_${INPUT_commodore_cluster_id}"
     ssh_public_key="${ssh_private_key}.pub"
@@ -895,6 +895,7 @@ spells:
   inputs:
   - name: commodore_api_url
   - name: vault_address
+  - name: vault_login_method
   - name: kubeconfig_path
   run: |
     set -euo pipefail
@@ -903,7 +904,7 @@ spells:
     export KUBECONFIG="${INPUT_kubeconfig_path}"
 
     export VAULT_ADDR=${INPUT_vault_address}
-    vault login -method=oidc
+    vault login -method=${INPUT_vault_login_method}
 
     echo '# Applying cert-manager ... #'
     kubectl apply -f catalog/manifests/cert-manager/00_namespace.yaml

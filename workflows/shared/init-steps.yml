@@ -34,6 +34,8 @@ spells:
       You might use the WebUI at https://control.vshn.net/syn/lieutenantapiendpoints to create and manage your clusters.
   outputs:
   - name: commodore_tenant_id
+  - name: vault_address
+  - name: vault_login_method
   - name: csp_region
   run: |
     set -euo pipefail
@@ -47,6 +49,12 @@ spells:
     region=$(curl -sH "Authorization: Bearer $(commodore fetch-token)" ${COMMODORE_API_URL}/clusters/${INPUT_commodore_cluster_id} | jq -r .facts.region)
     if test -z "$region" && test "$region" != "null" ; then { echo "❌ Failed to retrieve CSP region for cluster ID '$INPUT_commodore_cluster_id'."; exit 1; } ; else { echo "✅ Retrieved CSP region '$region' for cluster ID '$INPUT_commodore_cluster_id'."; } ; fi
     env -i "csp_region=$region" >> "$OUTPUT"
+
+    echo "Retrieving Vault address and login method..."
+    vault_addr=$(curl -s "${COMMODORE_API_URL}" | jq -r '.vault.addr')
+    env -i "vault_address=${vault_addr}" >> "$OUTPUT"
+    vault_login_method=$(curl -s "${COMMODORE_API_URL}" | jq -r '.vault.loginMethod')
+    env -i "vault_login_method=${vault_login_method}" >> "$OUTPUT"
 - match: And a Keycloak service
   description: |-
     In this step, you have to create a Keycloak service for the new cluster

@@ -49,11 +49,12 @@ spells:
     during decommissioning.
   inputs:
   - name: vault_address
+  - name: vault_login_method
   - name: commodore_cluster_id
   run: |
     set -euo pipefail
     export VAULT_ADDR=${INPUT_vault_address}
-    vault login -method=oidc
+    vault login -method=${INPUT_vault_login_method}
     OPSGENIE_KEY=$(vault kv get -format=json \
       clusters/kv/__shared__/__shared__/opsgenie/aldebaran | \
       jq -r '.data.data["heartbeat-password"]')
@@ -287,6 +288,7 @@ spells:
   - name: commodore_cluster_id
   - name: commodore_api_url
   - name: vault_address
+  - name: vault_login_method
   - name: backup_deletion_confirmation
   run: |
     set -euo pipefail
@@ -308,7 +310,7 @@ spells:
     SECRET_KEY="$(yq -o=json 'select(.kind == "Secret" and .metadata.name == "objects-backup-s3-credentials") | .stringData.password' catalog/manifests/cluster-backup/10_object.yaml | cut -d: -f2)"
 
     export VAULT_ADDR=${INPUT_vault_address}
-    vault login -method=oidc
+    vault login -method=${INPUT_vault_login_method}
 
     for secret in $(find catalog/refs/ -type f \
       | sed -r -e 's#catalog/refs#clusters/kv#' -e 's#(.*)/.*#\1#' \
@@ -334,11 +336,12 @@ spells:
     This step deletes the cluster's OpsGenie heartbeat.
   inputs:
   - name: vault_address
+  - name: vault_login_method
   - name: commodore_cluster_id
   run: |
     set -euo pipefail
     export VAULT_ADDR=${INPUT_vault_address}
-    vault login -method=oidc
+    vault login -method=${INPUT_vault_login_method}
     OPSGENIE_KEY=$(vault kv get -format=json \
       clusters/kv/__shared__/__shared__/opsgenie/aldebaran | \
       jq -r '.data.data["heartbeat-password"]')
