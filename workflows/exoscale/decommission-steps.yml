@@ -199,6 +199,7 @@ spells:
   - name: exoscale_key
   - name: exoscale_secret
   - name: vault_address
+  - name: vault_login_method
   - name: commodore_cluster_id
   - name: commodore_api_url
   - name: backup_deletion_confirmation
@@ -238,7 +239,7 @@ spells:
     git archive --remote "${REPO_URL}" master | tar -xC catalog
 
     export VAULT_ADDR=${INPUT_vault_address}
-    vault login -method=oidc
+    vault login -method=${INPUT_vault_login_method}
 
     # extract restic credentials from catalog and vault
     restic_repo=s3:$(yq -o=json 'select(.kind == "Schedule")| .spec.backend.s3 | .endpoint + "/" + .bucket' catalog/manifests/cluster-backup/10_object.yaml | tr -d '"')
