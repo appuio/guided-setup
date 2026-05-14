@@ -113,7 +113,7 @@ COPY --from=ghcr.io/vshn/emergency-credentials-receive:v1.2.2 \
 
 # Exo CLI
 # renovate: datasource=github-releases depName=exoscale/cli
-ARG EXO_VERSION=v1.93.0
+ARG EXO_VERSION=v1.94.2
 RUN cd /tmp && \
     wget https://github.com/exoscale/cli/releases/download/${EXO_VERSION}/exoscale-cli_${EXO_VERSION##v}_linux_${TARGETARCH}.deb && \
     wget https://github.com/exoscale/cli/releases/download/${EXO_VERSION}/exoscale-cli_${EXO_VERSION##v}_linux_${TARGETARCH}.deb.sig && \
