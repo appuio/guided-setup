@@ -60,7 +60,7 @@ spells:
     echo "export KUBECONFIG=${INPUT_kubeconfig_path}2"
     echo
     export KUBECONFIG="${INPUT_kubeconfig_path}2"
-    kubectl wait --for condition=ready certificate/api-server-cluster-certificate-default
+    kubectl wait -n openshift-config --for condition=ready certificate/api-server-cluster-certificate-default
     echo "Waiting for all kube-apiserver instances to be updated ..."
     kubectl wait --for condition=progressing=false --timeout=15m co kube-apiserver
 
