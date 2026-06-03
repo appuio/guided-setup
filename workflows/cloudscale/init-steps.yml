@@ -334,7 +334,7 @@ spells:
     mc cp "${installer_dir}/bootstrap.ign" "${INPUT_commodore_cluster_id}/${INPUT_commodore_cluster_id}-bootstrap-ignition/"
 
     ignition_bootstrap=$(mc share download \
-      --json --expire=4h \
+      --json --expire=24h \
       "${INPUT_commodore_cluster_id}/${INPUT_commodore_cluster_id}-bootstrap-ignition/bootstrap.ign" | jq -r '.share')
 
     env -i "ignition_bootstrap=$ignition_bootstrap" >> "$OUTPUT"
