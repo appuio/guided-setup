@@ -107,7 +107,7 @@ RUN cd /tmp && \
 
 
 # Emergency-credentials-receive
-COPY --from=ghcr.io/vshn/emergency-credentials-receive:v1.2.2 \
+COPY --from=ghcr.io/vshn/emergency-credentials-receive:v1.2.4 \
     /usr/bin/emergency-credentials-receive \
     /usr/local/bin/emergency-credentials-receive
 
