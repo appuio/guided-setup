@@ -115,7 +115,7 @@ spells:
       "$(echo "$INPUT_bucket_user" | jq -r '.keys[0].access_key')" \
       "$(echo "$INPUT_bucket_user" | jq -r '.keys[0].secret_key')"
 
-    echo "Uploading Red Hat CoreOS image '$INPUT_image_path' to S3 bucket '${INPUT_commodore_cluster_id}-image-registry'..."
+    echo "Uploading Red Hat CoreOS image '$INPUT_image_path' to S3 bucket '${INPUT_commodore_cluster_id}-bootstrap-ignition'..."
     mc cp "rhcos-${INPUT_image_major}.${INPUT_image_minor}.qcow2" "${INPUT_commodore_cluster_id}/${INPUT_commodore_cluster_id}-bootstrap-ignition/"
 
     echo "Upload completed."
