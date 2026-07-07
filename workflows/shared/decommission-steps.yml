@@ -3,11 +3,6 @@ spells:
   description: |-
     This step ensures the emergency credentials for the cluster have been retrieved
   inputs:
-  - name: cluster_domain
-    description: |-
-      Domain of the cluster - the part after `api` or `apps`, respectively.
-
-      Usually of the form `<CLUSTER_ID>.<BASE_DOMAIN>`
   - name: passbolt_passphrase
     description: |-
       Your password for Passbolt.
@@ -18,11 +13,11 @@ spells:
   - name: kubeconfig_path
   run: |
     set -euo pipefail
-    export EMR_KUBERNETES_ENDPOINT=https://api.${INPUT_cluster_domain}:6443
-    export EMR_PASSPHRASE="${INPUT_passbolt_passphrase}"
-    emergency-credentials-receive "${INPUT_commodore_cluster_id}"
-
+    export KHARON_PASSBOLT_PASSPHRASE="${INPUT_passbolt_passphrase}"
     export KUBECONFIG="em-${INPUT_commodore_cluster_id}"
+    kharon update
+    kharon emergency-credentials "${INPUT_commodore_cluster_id}"
+
     kubectl get nodes
 
     env -i "kubeconfig_path=$(pwd)/em-${INPUT_commodore_cluster_id}" >> "$OUTPUT"

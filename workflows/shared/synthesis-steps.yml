@@ -51,7 +51,6 @@ spells:
     This step ensures the emergency credentials for the cluster can be retrieved.
   inputs:
   - name: kubeconfig_path
-  - name: cluster_domain
   - name: commodore_cluster_id
   - name: passbolt_passphrase
     type: local-sensitive
@@ -76,12 +75,12 @@ spells:
       echo -n .
     done
 
-    export EMR_KUBERNETES_ENDPOINT=https://api.${INPUT_cluster_domain}:6443
-    export EMR_PASSPHRASE="${INPUT_passbolt_passphrase}"
-    emergency-credentials-receive "${INPUT_commodore_cluster_id}"
+    export KHARON_PASSBOLT_PASSPHRASE="${INPUT_passbolt_passphrase}"
+    export KUBECONFIG="em-${INPUT_commodore_cluster_id}"
+    kharon update
+    kharon emergency-credentials "${INPUT_commodore_cluster_id}"
 
     yq -i e '.clusters[0].cluster.insecure-skip-tls-verify = true' "em-${INPUT_commodore_cluster_id}"
-    export KUBECONFIG="em-${INPUT_commodore_cluster_id}"
     kubectl get nodes
     oc whoami | grep system:serviceaccount:appuio-emergency-credentials-controller: || exit 1
 

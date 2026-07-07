@@ -22,4 +22,3 @@ Then I delete the cluster's Vault secrets
 And I delete the cluster's OpsGenie heartbeat
 And I delete the cluster from Lieutenant
 And I delete the Keycloak service
-And I remove the cluster from openshift4-clusters
