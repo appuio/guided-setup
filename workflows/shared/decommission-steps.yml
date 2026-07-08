@@ -3,11 +3,6 @@ spells:
   description: |-
     This step ensures the emergency credentials for the cluster have been retrieved
   inputs:
-  - name: cluster_domain
-    description: |-
-      Domain of the cluster - the part after `api` or `apps`, respectively.
-
-      Usually of the form `<CLUSTER_ID>.<BASE_DOMAIN>`
   - name: passbolt_passphrase
     description: |-
       Your password for Passbolt.
@@ -18,11 +13,11 @@ spells:
   - name: kubeconfig_path
   run: |
     set -euo pipefail
-    export EMR_KUBERNETES_ENDPOINT=https://api.${INPUT_cluster_domain}:6443
-    export EMR_PASSPHRASE="${INPUT_passbolt_passphrase}"
-    emergency-credentials-receive "${INPUT_commodore_cluster_id}"
-
+    export KHARON_PASSBOLT_PASSPHRASE="${INPUT_passbolt_passphrase}"
     export KUBECONFIG="em-${INPUT_commodore_cluster_id}"
+    kharon update
+    kharon emergency-credentials "${INPUT_commodore_cluster_id}"
+
     kubectl get nodes
 
     env -i "kubeconfig_path=$(pwd)/em-${INPUT_commodore_cluster_id}" >> "$OUTPUT"
@@ -377,37 +372,3 @@ spells:
     echo
     echo You can go to https://control.vshn.net/vshn/services/${INPUT_commodore_cluster_id}/delete
     sleep 2
-
-- match: And I remove the cluster from openshift4-clusters
-  description: |-
-    This step removes the cluster from https://git.vshn.net/vshn/openshift4-clusters
-  inputs:
-  - name: commodore_cluster_id
-  - name: gitlab_api_token
-  run: |
-    set -euo pipefail
-    if [ -e openshift4-clusters ]
-    then
-      rm -rf openshift4-clusters
-    fi
-    git clone git@git.vshn.net:vshn/openshift4-clusters.git
-    pushd openshift4-clusters
-
-    git rm -rf "${INPUT_commodore_cluster_id}" || true
-
-    if git diff-index --quiet HEAD
-    then
-      echo "No changes, skipping commit"
-    else
-      git checkout -b "remove-${INPUT_commodore_cluster_id}"
-      git commit -m"Remove ${INPUT_commodore_cluster_id}"
-      git push origin "remove-${INPUT_commodore_cluster_id}"
-
-      auth="PRIVATE-TOKEN: ${INPUT_gitlab_api_token}"
-
-      response=$( curl -s -XPOST -H"$auth" -H"Content-Type: application/json" https://git.vshn.net/api/v4/projects/57660/merge_requests -d'{"source_branch":"'remove-${INPUT_commodore_cluster_id}'","target_branch":"main","title":"Remove cluster '${INPUT_commodore_cluster_id}'"}' )
-      echo
-      echo ">>> Please review and merge the MR at $( echo "$response" | jq -r .web_url )"
-      echo
-    fi || true
-    popd

@@ -105,11 +105,14 @@ RUN cd /tmp && \
     mv /tmp/oc /usr/local/bin/oc && \
     rm -f /tmp/openshift-client-linux-${OC_VERSION}.tar.gz
 
-
-# Emergency-credentials-receive
-COPY --from=ghcr.io/vshn/emergency-credentials-receive:v1.2.4 \
-    /usr/bin/emergency-credentials-receive \
-    /usr/local/bin/emergency-credentials-receive
+# Kharon
+# renovate: datasource=github-releases depName=vshn/kharon
+ARG KHARON_VERSION=v1.7.4
+RUN \
+    cd /tmp && \
+    wget "https://github.com/vshn/kharon/releases/download/${KHARON_VERSION}/kharon-$( if [[ $TARGETARCH == arm64 ]] ; then echo 'darwin-aarch64' ; else echo 'linux-x86_64' ; fi )" && \
+    mv /tmp/kharon* /usr/local/bin/kharon && \
+    chmod a+x /usr/local/bin/kharon
 
 # Exo CLI
 # renovate: datasource=github-releases depName=exoscale/cli

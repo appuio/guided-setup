@@ -40,5 +40,4 @@ And I schedule the first maintenance
 
 Then I configure apt-dater groups for the LoadBalancers
 And I remove the bootstrap bucket
-And I add the cluster to openshift4-clusters
 And I wait for maintenance to complete
