@@ -80,14 +80,14 @@ spells:
       env -i "rhcos_template=$slug" >> "$OUTPUT"
       exit 0
     fi
-    
+
 
     exo storage upload "${INPUT_patched_image_path}" "sos://${INPUT_commodore_cluster_id}-bootstrap" --acl public-read
 
     sleep 3
 
     exo compute instance-template register "rhcos-${RHCOS_VERSION}" \
-      "https://${INPUT_exoscale_s3_endpoint}/${INPUT_commodore_cluster_id}-bootstrap/rhcos-${RHCOS_VERSION}.qcow2" \
+      "https://${INPUT_exoscale_s3_endpoint}/${INPUT_commodore_cluster_id}-bootstrap/${INPUT_patched_image_path}" \
       "$(md5sum ${INPUT_patched_image_path} | awk '{ print $1 }')" \
       --zone "${INPUT_csp_region}" \
       --boot-mode uefi \
@@ -95,7 +95,7 @@ spells:
       --username core \
       --description "Red Hat Enterprise Linux CoreOS (RHCOS) ${RHCOS_VERSION}"
 
-    exo storage delete -f "sos://${CLUSTER_ID}-bootstrap/rhcos-${RHCOS_VERSION}.qcow2"
+    exo storage delete -f "sos://${INPUT_commodore_cluster_id}-bootstrap/${INPUT_patched_image_path}"
 
     export RHCOS_TEMPLATE="rhcos-${RHCOS_VERSION}"
 
