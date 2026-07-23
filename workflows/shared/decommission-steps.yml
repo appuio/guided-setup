@@ -4,6 +4,7 @@ spells:
     This step ensures the emergency credentials for the cluster have been retrieved
   inputs:
   - name: passbolt_passphrase
+    type: sensitive
     description: |-
       Your password for Passbolt.
 
