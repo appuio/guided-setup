@@ -52,6 +52,7 @@ spells:
   inputs:
   - name: kubeconfig_path
   - name: commodore_cluster_id
+  - name: commodore_api_url
   - name: passbolt_passphrase
     type: local-sensitive
     description: |-
@@ -77,8 +78,8 @@ spells:
 
     export KHARON_PASSBOLT_PASSPHRASE="${INPUT_passbolt_passphrase}"
     export KUBECONFIG="em-${INPUT_commodore_cluster_id}"
-    kharon update
-    kharon emergency-credentials "${INPUT_commodore_cluster_id}"
+    kharon update --lieutenant-url "${INPUT_commodore_api_url}" --inventory-file kharon-inventory.json
+    kharon emergency-credentials "${INPUT_commodore_cluster_id}" --inventory-file kharon-inventory.json
 
     yq -i e '.clusters[0].cluster.insecure-skip-tls-verify = true' "em-${INPUT_commodore_cluster_id}"
     kubectl get nodes
@@ -108,7 +109,7 @@ spells:
     echo '# Retrieving active alerts ...'
     kubectl --as=system:admin -n openshift-monitoring exec sts/alertmanager-main -- \
       amtool --alertmanager.url=http://localhost:9093 alert --active
-    
+
     echo
     echo '#######################################################'
     echo '#                                                     #'
