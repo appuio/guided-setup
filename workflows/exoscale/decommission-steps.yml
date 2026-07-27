@@ -14,7 +14,6 @@ spells:
     type: local-sensitive
   - name: commodore_cluster_id
   - name: commodore_api_url
-  - name: rhcos_template
   - name: csp_region
   outputs:
   - name: lb_fqdn_1
@@ -36,7 +35,6 @@ spells:
     EXOSCALE_API_SECRET=${INPUT_exoscale_secret}
     TF_VAR_control_vshn_net_token=${INPUT_control_vshn_api_token}
     TF_VAR_region=${INPUT_csp_region}
-    TF_VAR_rhcos_template=${INPUT_rhcos_template}
     GIT_AUTHOR_NAME=$(git config --global user.name)
     GIT_AUTHOR_EMAIL=$(git config --global user.email)
     HIERADATA_REPO_TOKEN=${INPUT_gitlab_api_token}
@@ -112,7 +110,6 @@ spells:
   - name: gitlab_api_token
   - name: commodore_cluster_id
   - name: commodore_api_url
-  - name: rhcos_template
   - name: csp_region
   run: |
     set -euo pipefail
@@ -127,7 +124,6 @@ spells:
     EXOSCALE_API_SECRET=${INPUT_exoscale_secret}
     TF_VAR_control_vshn_net_token=${INPUT_control_vshn_api_token}
     TF_VAR_region=${INPUT_csp_region}
-    TF_VAR_rhcos_template=${INPUT_rhcos_template}
     GIT_AUTHOR_NAME=$(git config --global user.name)
     GIT_AUTHOR_EMAIL=$(git config --global user.email)
     HIERADATA_REPO_TOKEN=${INPUT_gitlab_api_token}
