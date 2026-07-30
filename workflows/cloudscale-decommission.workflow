@@ -11,6 +11,7 @@ And I delete all Load Balancer services and Load Balancers
 And I disable machine autoscaling
 And I delete all persistent volumes
 And I delete all machinesets
+Then I compile the cluster catalog
 Then I save the loadbalancer metadata
 And I downtime the loadbalancers in icinga
 And I decommission Terraform resources

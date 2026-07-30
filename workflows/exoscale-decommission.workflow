@@ -8,7 +8,7 @@ Then I confirm cluster deletion
 Then I disable the OpsGenie heartbeat
 And I disable Project Syn
 And I delete all Load Balancer services
-And I prepare the cluster repository
+Then I compile the cluster catalog
 Then I save the loadbalancer metadata
 And I downtime the loadbalancers in icinga
 And I decommission Terraform resources

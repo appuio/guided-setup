@@ -274,7 +274,7 @@ spells:
     fi
 
     # proceed with deleting the backup bucket
-    exo storage rb -r -f "${INPUT_commodore_cluster_id}-backup" || true
+    exo storage rb -r -f "${INPUT_commodore_cluster_id}-cluster-backup" || true
 
 - match: And I delete all Load Balancer services
   description: |-
