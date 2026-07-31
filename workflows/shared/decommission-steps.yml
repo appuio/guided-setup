@@ -4,7 +4,7 @@ spells:
     This step ensures the emergency credentials for the cluster have been retrieved
   inputs:
   - name: passbolt_passphrase
-    type: sensitive
+    type: local-sensitive
     description: |-
       Your password for Passbolt.
 
@@ -87,7 +87,7 @@ spells:
     kubectl delete machineautoscaler -A --all
 - match: And I delete all persistent volumes
   description: |-
-    This step deletes all persistent volumes on the cluster, so that the corresponding Cloudscale resources can be decommissioned by the controller.
+    This step deletes all persistent volumes on the cluster, so that the corresponding CSP resources can be decommissioned by the controller.
 
     By cordoning all non-master nodes and deleting all their pods (except the csi driver pods) we ensure that no new PVs are created, while the existing ones can be cleaned up. Deleting all pods has the additional benefit that we don’t have to deal with PDBs when deleting the machinesets in the next step.
   inputs:
@@ -151,20 +151,13 @@ spells:
   inputs:
   - name: lb_fqdn_1
   - name: lb_fqdn_2
+  - name: control_vshn_api_token
   run: |
     set -euo pipefail
-    echo '###################################################################################'
-    echo '#                                                                                 #'
-    echo "#  Please manually delete the cluster's LoadBalancer servers before proceeding.   #"
-    echo '#                                                                                 #'
-    echo '###################################################################################'
-    echo
-    echo You can go to:
-    echo https://control.vshn.net/servers/definitions/appuio/${INPUT_lb_fqdn_1}/delete
-    echo https://control.vshn.net/servers/definitions/appuio/${INPUT_lb_fqdn_2}/delete
-    sleep 2
-    # NOTE(aa): This step is currently annoying to automate, but once ticket PORTAL-253 is resolved,
-    # it should be easy.
+    echo "Deleting server definitions ..."
+    curl -XDELETE -H"$AUTH" https://control.vshn.net/api/servers/1/appuio/${INPUT_lb_fqdn_1}
+    curl -XDELETE -H"$AUTH" https://control.vshn.net/api/servers/1/appuio/${INPUT_lb_fqdn_2}
+    echo "Server definitions deleted."
 
 - match: And I decommission the LoadBalancers
   description: |-

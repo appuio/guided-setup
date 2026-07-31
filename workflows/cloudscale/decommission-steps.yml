@@ -79,6 +79,11 @@ spells:
     HIERADATA_REPO_TOKEN=${INPUT_gitlab_api_token}
     EOF
 
+    if [[ ! -d catalog ]]
+    then
+      commodore catalog compile "$INPUT_commodore_cluster_id"
+    fi
+
     tf_image=$(\
       yq eval ".parameters.openshift4_terraform.images.terraform.image" \
       dependencies/openshift4-terraform/class/defaults.yml)
@@ -195,7 +200,10 @@ spells:
       "-backend-config=unlock_method=DELETE" \
       "-backend-config=retry_wait_min=5"
 
-    terraform state rm "module.cluster.module.lb.module.hiera[0].gitfile_checkout.appuio_hieradata"
+    if terraform state list | grep "gitfile_checkout.appuio_hieradata" > /dev/null
+    then
+      terraform state rm "module.cluster.module.lb.module.hiera[0].gitfile_checkout.appuio_hieradata"
+    fi
 
     # Suppress errors on the first run; it is expected to fail
     terraform destroy --auto-approve || true
