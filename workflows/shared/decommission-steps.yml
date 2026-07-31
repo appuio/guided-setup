@@ -96,7 +96,7 @@ spells:
     kubectl delete machineautoscaler -A --all
 - match: And I delete all persistent volumes
   description: |-
-    This step deletes all persistent volumes on the cluster, so that the corresponding Cloudscale resources can be decommissioned by the controller.
+    This step deletes all persistent volumes on the cluster, so that the corresponding CSP resources can be decommissioned by the controller.
 
     By cordoning all non-master nodes and deleting all their pods (except the csi driver pods) we ensure that no new PVs are created, while the existing ones can be cleaned up. Deleting all pods has the additional benefit that we don’t have to deal with PDBs when deleting the machinesets in the next step.
   inputs:
