@@ -51,8 +51,8 @@ spells:
     This step ensures the emergency credentials for the cluster can be retrieved.
   inputs:
   - name: kubeconfig_path
-  - name: cluster_domain
   - name: commodore_cluster_id
+  - name: commodore_api_url
   - name: passbolt_passphrase
     type: local-sensitive
     description: |-
@@ -76,12 +76,12 @@ spells:
       echo -n .
     done
 
-    export EMR_KUBERNETES_ENDPOINT=https://api.${INPUT_cluster_domain}:6443
-    export EMR_PASSPHRASE="${INPUT_passbolt_passphrase}"
-    emergency-credentials-receive "${INPUT_commodore_cluster_id}"
+    export KHARON_PASSBOLT_PASSPHRASE="${INPUT_passbolt_passphrase}"
+    export KUBECONFIG="em-${INPUT_commodore_cluster_id}"
+    kharon update --lieutenant-url "${INPUT_commodore_api_url}" --inventory-file kharon-inventory.json
+    kharon emergency-credentials "${INPUT_commodore_cluster_id}" --inventory-file kharon-inventory.json
 
     yq -i e '.clusters[0].cluster.insecure-skip-tls-verify = true' "em-${INPUT_commodore_cluster_id}"
-    export KUBECONFIG="em-${INPUT_commodore_cluster_id}"
     kubectl get nodes
     oc whoami | grep system:serviceaccount:appuio-emergency-credentials-controller: || exit 1
 
@@ -109,7 +109,7 @@ spells:
     echo '# Retrieving active alerts ...'
     kubectl --as=system:admin -n openshift-monitoring exec sts/alertmanager-main -- \
       amtool --alertmanager.url=http://localhost:9093 alert --active
-    
+
     echo
     echo '#######################################################'
     echo '#                                                     #'

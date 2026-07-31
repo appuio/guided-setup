@@ -9,6 +9,7 @@ Then I disable the OpsGenie heartbeat
 And I disable Project Syn
 And I delete all Load Balancer services
 And I delete all persistent volumes
+And I prepare the cluster repository
 Then I save the loadbalancer metadata
 And I downtime the loadbalancers in icinga
 And I decommission Terraform resources
@@ -23,4 +24,3 @@ Then I delete the cluster's Vault secrets
 And I delete the cluster's OpsGenie heartbeat
 And I delete the cluster from Lieutenant
 And I delete the Keycloak service
-And I remove the cluster from openshift4-clusters

@@ -1,5 +1,5 @@
 Given I have all prerequisites installed
-And I download the `openshift-install` binary for version "4.20"
+And I download the `openshift-install` binary for version "4.21"
 And a lieutenant cluster
 And a Keycloak service
 And Exoscale API tokens
@@ -9,7 +9,7 @@ And basic cluster information
 Then I check the Exoscale resource quotas
 Then I create the necessary Exoscale IAM keys
 And I set up required S3 buckets
-Then I download the OpenShift image for version "4.20.0"
+Then I download the OpenShift image for version "4.21.0"
 And I patch the OpenShift image
 And I import the image in Exoscale
 Then I set secrets in Vault
@@ -40,5 +40,4 @@ And I schedule the first maintenance
 
 Then I configure apt-dater groups for the LoadBalancers
 And I remove the bootstrap bucket
-And I add the cluster to openshift4-clusters
 And I wait for maintenance to complete
