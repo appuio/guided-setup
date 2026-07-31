@@ -1,0 +1,83 @@
+spells:
+- match: Then I destroy Terraform resources
+  description: This step runs terraform destroy.
+  inputs:
+  - name: xelon_token
+  - name: xelon_client_id
+  - name: ignition_bootstrap
+  run: |
+    set -euo pipefail
+
+    installer_dir="$(pwd)/target"
+
+    cat <<EOF > terraform.env
+    TF_VAR_xelon_token=${INPUT_xelon_token}
+    TF_VAR_xelon_client_id=${INPUT_xelon_client_id}
+    TF_VAR_ignition_bootstrap=${INPUT_ignition_bootstrap}
+    EOF
+    tf_image="registry.gitlab.com/gitlab-org/terraform-images/releases/terraform"
+    tf_tag='1.5.7'
+
+    echo "Using Terraform image: ${tf_image}:${tf_tag}"
+
+    base_dir=$(pwd)
+    terraform() {
+      touch .terraformrc
+      docker run --rm -e REAL_UID="$(id -u)" -e TF_CLI_CONFIG_FILE=/tf/.terraformrc --env-file "${base_dir}/terraform.env" -w /tf -v "$(pwd):/tf" --ulimit memlock=-1 "${tf_image}:${tf_tag}" /tf/terraform.sh "${@}"
+    }
+
+
+    pushd terraform
+
+    terraform init
+
+    terraform destroy -auto-approve || true
+
+    # NOTE(aa): Destruction tends to fail the first time due to race condition between deleting the network and deleting IPs from the network.
+    terraform destroy
+
+- match: And I delete all S3 buckets
+  description: |-
+    This step deletes the cluster's associated S3 buckets from Cloudscale.
+  inputs:
+  - name: cloudscale_token
+    type: sensitive
+  - name: clsc_region
+  - name: commodore_cluster_id
+  run: |
+    set -euo pipefail
+    # Use already exiting bucket user
+    response=$(curl -sH "Authorization: Bearer $INPUT_cloudscale_token" \
+      https://api.cloudscale.ch/v1/objects-users | \
+      jq -e ".[] | select(.display_name == \"${INPUT_commodore_cluster_id}\")")
+
+    # configure minio client to use the bucket
+    mc alias set \
+      "${INPUT_commodore_cluster_id}" "https://objects.${INPUT_clsc_region}.cloudscale.ch" \
+      "$(echo "$response" | jq -r '.keys[0].access_key')" \
+      "$(echo "$response" | jq -r '.keys[0].secret_key')"
+
+    # delete bootstrap-ignition bucket (should already be deleted after setup)
+    mc rb "${INPUT_commodore_cluster_id}/${INPUT_commodore_cluster_id}-bootstrap-ignition" --force || true
+
+- match: And I delete the cluster's API tokens
+  description: |-
+    This step deletes the cluster's associated Cloudscale API tokens from Cloudscale.
+  inputs:
+  - name: cloudscale_token
+  run: |
+    set -euo pipefail
+    echo '##############################################################'
+    echo '#                                                            #'
+    echo '#   Please delete the Cloudscale token                       #'
+    echo '#   associated with this cluster via the Cloudscale console. #'
+    echo '#                                                            #'
+    echo '##############################################################'
+
+    echo -n "Checking for deletion of main Cloudscale token ..."
+    while [[ $(curl -sH "Authorization: Bearer ${INPUT_cloudscale_token}" https://api.cloudscale.ch/v1/flavors -o /dev/null -w"%{http_code}") != 401 ]]
+    do
+      echo -n .
+      sleep 3
+    done
+    echo " Success."
