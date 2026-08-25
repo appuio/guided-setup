@@ -81,9 +81,11 @@ spells:
     This step compiles the catalog to ensure you have a local checkout of the cluster repository
     during decommissioning.
   inputs:
+  - name: commodore_api_url
   - name: commodore_cluster_id
   run: |
     set -euo pipefail
+    export COMMODORE_API_URL="${INPUT_commodore_api_url}"
     commodore catalog compile ${INPUT_commodore_cluster_id}
 - match: And I disable machine autoscaling
   description: |-
