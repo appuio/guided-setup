@@ -61,10 +61,12 @@ spells:
     if [[ $( curl -sH "Authorization: Bearer ${INPUT_cloudscale_token}" https://api.cloudscale.ch/v1/flavors -o /dev/null -w"%{http_code}" ) != 200 ]]
     then
       echo "Cloudscale token not valid!"
+      exit 1
     fi
     if [[ $( curl -sH "Authorization: Bearer ${INPUT_cloudscale_token_floaty}" https://api.cloudscale.ch/v1/flavors -o /dev/null -w"%{http_code}" ) != 200 ]]
     then
       echo "Cloudscale Floaty token not valid!"
+      exit 1
     fi
 - match: Then I set secrets in Vault
   description: |-
