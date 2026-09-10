@@ -26,6 +26,7 @@ spells:
           echo '###################################################################################'
           echo
           echo 'See https://kb.vshn.ch/corp-tech/projectsyn/explanation/bootstrap-token.html#_resetting_the_bootstrap_token'
+          sleep 0.1
           exit 1
       fi
 
