@@ -134,7 +134,7 @@ RUN chmod a+x /usr/local/bin/xdg-open
 ENV BROWSER=xdg-open
 
 # Gandalf
-COPY --from=ghcr.io/appuio/gandalf:v0.1.0 \
+COPY --from=ghcr.io/appuio/gandalf:v0.1.1 \
     /usr/bin/gandalf /usr/local/bin/gandalf
 
 # OIDC token callback for Commodore
