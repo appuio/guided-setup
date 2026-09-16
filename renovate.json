@@ -2,7 +2,7 @@
   "extends": [
     "config:base",
     ":gitSignOff",
-    ":disableDependencyDashboard"
+    "helpers:pinGitHubActionDigests"
   ],
   "labels": [
     "dependency"
@@ -61,6 +61,13 @@
     {
       "matchPackageNames": ["openshift-client"],
       "automerge": false
+    },
+    {
+      "matchManagers": ["github-actions"],
+      "groupName": "github actions dependencies",
+      "minimumReleaseAge": "7 days",
+      "prCreation": "not-pending",
+      "internalChecksFilter": "strict"
     }
   ]
 }
