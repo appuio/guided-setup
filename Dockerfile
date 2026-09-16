@@ -77,7 +77,7 @@ RUN \
 
 # MinIO CLI
 # renovate: datasource=custom.minio depName=mcli
-COPY --from=docker.io/minio/mc:RELEASE.2025-08-13T08-35-41Z \
+COPY --from=quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z \
     /usr/bin/mc /usr/local/bin/mc
 
 
