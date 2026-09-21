@@ -354,8 +354,10 @@ spells:
     mc rb "${INPUT_commodore_cluster_id}_backup/${INPUT_commodore_cluster_id}-cluster-backup" --force
 
     # Delete object user
-    echo "Deleting object user ..."
-    curl -i -H "Authorization: Bearer ${INPUT_cloudscale_token}" -X DELETE "$(echo "$response" | jq -r '.href')"
+    objuser=$(jq -r -n --argjson resp "$response" '$resp.href')
+    echo "Deleting object user '$objuser' ..."
+    curl -fsSL -H "Authorization: Bearer ${INPUT_cloudscale_token}" -X DELETE "$objuser"
+    echo "Objects user deleted."
 
 - match: And I delete the cluster's API tokens
   description: |-
