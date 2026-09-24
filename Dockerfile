@@ -107,7 +107,7 @@ RUN cd /tmp && \
 
 # Kharon
 # renovate: datasource=github-releases depName=vshn/kharon
-ARG KHARON_VERSION=v1.7.4
+ARG KHARON_VERSION=v1.8.1
 RUN \
     cd /tmp && \
     wget "https://github.com/vshn/kharon/releases/download/${KHARON_VERSION}/kharon-$( if [[ $TARGETARCH == arm64 ]] ; then echo 'darwin-aarch64' ; else echo 'linux-x86_64' ; fi )" && \
