@@ -824,8 +824,9 @@ spells:
 
     export KUBECONFIG="${INPUT_kubeconfig_path}"
 
-    echo "Waiting for masters to become ready ..."
+    echo "Waiting for masters to be created ..."
     kubectl wait --for create --timeout=600s node -l node-role.kubernetes.io/master
+    echo "Waiting for masters to become ready ..."
     kubectl wait --for condition=ready --timeout=600s node -l node-role.kubernetes.io/master
     popd
 
