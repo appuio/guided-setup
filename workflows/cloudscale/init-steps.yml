@@ -22,7 +22,7 @@ spells:
 
     if which glab >/dev/null 2>&1 ; then { echo "✅ glab (GitLab CLI) is installed."; } ; else { echo "❌ glab (GitLab CLI) is not installed. Please install glab to proceed."; exit 1; } ; fi
 
-    if which host >/dev/null 2>&1 ; then { echo "✅ host (DNS lookup utility) is installed."; } ; else { echo "❌ host (DNS lookup utility) is not installed. Please install host to proceed."; exit 1; } ; fi
+    if which dig >/dev/null 2>&1 ; then { echo "✅ dig (DNS lookup utility) is installed."; } ; else { echo "❌ dig (DNS lookup utility) is not installed. Please install dig to proceed."; exit 1; } ; fi
 
     if which mc >/dev/null 2>&1 ; then { echo "✅ mc (MinIO Client) is installed."; } ; else { echo "❌ mc (MinIO Client) is not installed. Please install mc >= RELEASE.2024-01-18T07-03-39Z to proceed."; exit 1; } ; fi
     mc_version=$(mc --version | grep -Eo 'RELEASE[^ ]+')
@@ -486,10 +486,18 @@ spells:
     echo "@  Waiting for record to propagate...                                                   @"
     echo "@                                                                                       @"
     echo "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@"
-    while ! (host "api.${INPUT_cluster_domain}")
+    # NOTE(sg): We first query the SOA record for the cluster zone name. This
+    # shouldn't significantly pollute our cache, since that record should
+    # exist and is unlikely to change. Afterwards, we directly query the
+    # authoritative nameserver for the api record, which doesn't pollute any
+    # recursive DNS servers' caches.
+    auth_ns=$(dig +noall +authority SOA "${INPUT_cluster_domain}" | tr "\t" " " | tr -s " " | cut -d " " -f5)
+    while [ "$(dig +short A "@${auth_ns}" "api.${INPUT_cluster_domain}")" == "" ]
     do
+      echo -n "."
       sleep 15
     done
+    echo "✅ API record present"
     rm ../../../dns.txt
 
     lb1=$(terraform state show "module.cluster.module.lb.cloudscale_server.lb[0]" | grep fqdn | awk '{print $2}' | tr -d ' "\r\n')
@@ -800,10 +808,18 @@ spells:
     echo "@  Waiting for record to propagate...                                                   @"
     echo "@                                                                                       @"
     echo "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@"
-    while ! (host "etcd-0.${INPUT_cluster_domain}")
+    # NOTE(sg): We first query the SOA record for the cluster zone name. This
+    # shouldn't significantly pollute our cache, since that record should
+    # exist and is unlikely to change. Afterwards, we directly query the
+    # authoritative nameserver for the etcd-0 record, which doesn't pollute
+    # any recursive DNS servers' caches.
+    auth_ns=$(dig +noall +authority SOA "${INPUT_cluster_domain}" | tr "\t" " " | tr -s " " | cut -d " " -f5)
+    while [ "$(dig +short A "@${auth_ns}" "etcd-0.${INPUT_cluster_domain}")" == "" ]
     do
+      echo -n "."
       sleep 15
     done
+    echo "✅ etcd-0 record present"
     rm ../../../dns.txt
 
     export KUBECONFIG="${INPUT_kubeconfig_path}"
