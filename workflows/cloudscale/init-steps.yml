@@ -856,6 +856,9 @@ spells:
     kubectl -n syn-cert-manager patch --type=merge \
       $(kubectl -n syn-cert-manager get deploy -oname) \
       -p '{"spec":{"template":{"spec":{"tolerations":[{"operator":"Exists"}]}}}}'
+    echo '# Waiting for cert-manager to become available ... #'
+    kubectl -n syn-cert-manager wait --for=condition=available --timeout=300s \
+      deploy/cert-manager deploy/cert-manager-webhook
     echo '# Applied cert-manager. #'
     echo
     echo '# Applying machine-api-provider ... #'
@@ -878,6 +881,10 @@ spells:
     kapitan refs --reveal --refs-path catalog/refs -f catalog/manifests/cloudscale-loadbalancer-controller/10_secrets.yaml | kubectl apply -f -
 
     # TODO(aa): This fails on the first attempt because likely some of the previous resources need time to come online; figure out what to wait for
+    # TODO(sg): This still fails sometimes, even when waiting for cert-manager
+    # to become available. From the errors I've observed, there's some case
+    # where deploying the cert-manager resources runs into a timeout related
+    # to the validatingwebhookconfig for cert-manager.
     until kubectl apply -Rf catalog/manifests/cloudscale-loadbalancer-controller/10_kustomize
     do
       echo "Manifests didn't apply, waiting a moment to try again ..."
