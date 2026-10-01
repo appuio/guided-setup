@@ -30,6 +30,7 @@ And I verify emergency access
 And I configure the cluster alerts
 And I enable Opsgenie alerting
 And I verify the image registry config
+And I wait until all ArgoCD apps are synced and healthy
 And I schedule the first maintenance
 Then I configure apt-dater groups for the LoadBalancers
 And I remove the bootstrap bucket

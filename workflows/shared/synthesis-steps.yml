@@ -53,6 +53,35 @@ spells:
 
     echo "Done."
 
+- match: And I wait until all ArgoCD apps are synced and healthy
+  description: |-
+    Wait until all ArgoCD applications are synced and healthy.
+  inputs:
+    - name: kubeconfig_path
+  run: |
+    set -euo pipefail
+
+    export KUBECONFIG="${INPUT_kubeconfig_path}"
+
+    sync_timeout=600s
+    healthy_timeout=300s
+
+    echo "Wait until all ArgoCD apps are synced... (timeout=${sync_timeout})"
+    if ! kubectl -n syn wait --for jsonpath='{.status.sync.status}="Synced"' \
+      applications.argoproj.io --all --timeout="${sync_timeout}"; then
+      echo "❌ Wait for ArgoCD app sync timed out, check status manually!"
+    else
+      echo "✅ All ArgoCD apps synced"
+    fi
+
+    echo "Wait until all ArgoCD apps are healthy... (timeout=${healthy_timeout})"
+    if ! kubectl -n syn wait --for jsonpath='{.status.health.status}="Healthy"' \
+      applications.argoproj.io --all --timeout="${healthy_timeout}"; then
+      echo "❌ Wait for ArgoCD app health timed out, check status manually!"
+    else
+      echo "✅ Cluster synthesis complete. All ArgoCD apps healthy."
+    fi
+
 - match: And I verify emergency access
   description: |-
     This step ensures the emergency credentials for the cluster can be retrieved.

@@ -36,6 +36,7 @@ Then I set acme-dns CNAME records
 And I verify emergency access
 And I configure the cluster alerts
 And I enable Opsgenie alerting
+And I wait until all ArgoCD apps are synced and healthy
 And I schedule the first maintenance
 
 Then I configure apt-dater groups for the LoadBalancers
