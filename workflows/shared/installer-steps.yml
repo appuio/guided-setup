@@ -27,8 +27,31 @@ spells:
     fi
 
     rm -f openshift-install-linux.tar.gz
-    echo "Downloading openshift-install for version ${MATCH_ocp_version} ..."
-    curl -LO https://mirror.openshift.com/pub/openshift-v4/clients/ocp/stable-${MATCH_ocp_version}/openshift-install-linux.tar.gz
+    echo -n "Determining latest patch version for ${MATCH_ocp_version} ... "
+    ocp_graph=$(curl -fsSL "https://api.openshift.com/api/upgrades_info/v1/graph?channel=stable-${MATCH_ocp_version}&arch=amd64")
+    latest_version=$(jq -n -r --argjson g "$ocp_graph" --arg minor "${MATCH_ocp_version}" \
+      '[ $g.nodes[] | select(.version | test($minor)) | .version ]
+       | map(split(".") | map(tonumber))
+       | max | join(".")')
+    echo "${latest_version}"
+
+    echo -n "Determining latest patch version which can be upgraded to ${latest_version} ... "
+    prev_version=$(jq -n -r --argjson g "$ocp_graph" --arg latest "$latest_version" \
+      '$g.nodes
+       | to_entries[]
+       | select(.value.version==$latest)
+       | .key as $curr_index
+       | [
+         $g.edges[]
+         | select(.[1]==$curr_index)
+         | $g.nodes[.[0]].version
+         | split(".") | map(tonumber)
+       ] | max | join(".")')
+    echo "${prev_version}"
+
+    echo "Downloading openshift-install for version ${prev_version} ..."
+    curl -LO "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/${prev_version}/openshift-install-linux.tar.gz"
     tar -xf openshift-install-linux.tar.gz openshift-install
+    ./openshift-install version
 
     env -i "openshift_install_bin=$( pwd )/openshift-install" >> "$OUTPUT"
