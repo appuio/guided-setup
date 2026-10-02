@@ -76,10 +76,14 @@ RUN \
   rm -f /tmp/glab_${GLAB_VERSION##v}_linux_${TARGETARCH}.deb
 
 # MinIO CLI
-# renovate: datasource=custom.minio depName=mcli
-COPY --from=quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z \
-    /usr/bin/mc /usr/local/bin/mc
-
+# NOTE(sg): download from public GitHub archive, since container image doesn't
+# exist anymore. No renovate, since there won't be new releases.
+RUN \
+  cd /tmp && \
+  wget https://github.com/minio/mc/releases/download/RELEASE.2025-08-13T08-35-41Z/mcli_20250813083541.0.0_${TARGETARCH}.deb && \
+  dpkg -i /tmp/mcli_20250813083541.0.0_${TARGETARCH}.deb && \
+  rm -f /tmp/mcli_20250813083541.0.0_${TARGETARCH}.deb && \
+  ln -s /usr/local/bin/mcli /usr/local/bin/mc
 
 # Vault CLI
 # renovate: datasource=github-releases depName=hashicorp/vault

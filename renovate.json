@@ -29,10 +29,6 @@
   },
   "packageRules": [
     {
-      "matchPackageNames": ["docker.io/minio/mc"],
-      "versioning": "regex:^RELEASE\\.(?<major>\\d{4})-(?<minor>\\d{2})-(?<patch>\\d{2})"
-    },
-    {
       "matchUpdateTypes": [
         "patch",
         "digest"
