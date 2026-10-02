@@ -1,4 +1,15 @@
 spells:
+- match: And a dummy control.vshn.net API token
+  description: |-
+    This step configures a dummy value for the control.vshn.net API token input.
+
+    This is necessary so we can reuse some steps when decommissioning clusters without Puppet LBs.
+  outputs:
+    - name: control_vshn_api_token
+  run: |
+    set -euo pipefail
+
+    env -i "control_vshn_api_token=none" >> "$OUTPUT"
 - match: And I have emergency cluster access
   description: |-
     This step ensures the emergency credentials for the cluster have been retrieved
