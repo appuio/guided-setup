@@ -893,7 +893,7 @@ spells:
       echo "Manifests didn't apply, waiting a moment to try again ..."
       sleep 20
     done
-    echo "Waiting for load balancer to become available ..."
+    echo "Waiting for load balancer controller to become available ..."
     # NOTE(sg): We need to wait for at least one app node to become ready
     # before the cloudscale LB controller can be scheduled. This can take 5+
     # minutes, depending on how quickly the worker nodes are becoming ready.
