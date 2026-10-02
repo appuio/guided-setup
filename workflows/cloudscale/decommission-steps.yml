@@ -29,6 +29,34 @@ spells:
 
     env -i "cloudscale_token=${token}" >> "$OUTPUT"
     env -i "cloudscale_token_floaty=${floaty}" >> "$OUTPUT"
+- match: And I have the cluster's cloudscale token
+  description: |-
+    This step fetches the cluster's cloudscale token from Vault.
+  inputs:
+  - name: vault_address
+    description: |-
+      Address of the Vault server associated with the Lieutenant API to store cluster secrets.
+  - name: vault_login_method
+  - name: commodore_cluster_id
+  - name: commodore_tenant_id
+  outputs:
+  - name: cloudscale_token
+    type: sensitive
+  - name: cloudscale_token_floaty
+    description: |
+      Dummy token so that subsequent steps don't unnecessarily ask for a
+      floaty token that can't exist for a cluster without Puppet-managed LBs.
+  run: |
+    set -euo pipefail
+    export VAULT_ADDR=${INPUT_vault_address}
+    vault login -method=${INPUT_vault_login_method}
+
+    token=$(vault kv get -format=json \
+      "clusters/kv/${INPUT_commodore_tenant_id}/${INPUT_commodore_cluster_id}/cloudscale" | \
+      jq -r '.data.data["token"]')
+
+    env -i "cloudscale_token=${token}" >> "$OUTPUT"
+    env -i "cloudscale_token_floaty=none" >> "$OUTPUT"
 - match: And I delete all Load Balancer services and Load Balancers
   description: |-
     This step deletes all services of type LoadBalancer from the cluster.
