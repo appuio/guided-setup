@@ -368,9 +368,12 @@ spells:
     yq eval -i ".parameters.openshift4_terraform.terraform_variables.ssh_keys = [\"$(cat ${INPUT_ssh_public_key_path})\"]" \
       ${INPUT_commodore_cluster_id}.yml
 
-    echo "Commit changes"
-    git commit -a -m "Set cloudscale specific values in cluster ${CLUSTER_ID}"
-    git push
+    echo "Committing changes ..."
+    if git commit -a -m "Set cloudscale specific values in cluster ${CLUSTER_ID}"; then
+      git push
+    else
+      echo "No changes."
+    fi
 
     popd
 
