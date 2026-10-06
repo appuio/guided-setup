@@ -16,9 +16,9 @@ Then I configure the OpenShift installer
 And I configure Terraform for team "aldebaran"
 And I configure Terraform for Cloudscale
 Then I provision the loadbalancers
-And I provision the bootstrap node
+And I provision the bootstrap node and update the Puppet LBs
 And I store the subnet ID and floating IP in the Syn hierarchy
-And I provision the control plane
+And I provision the control plane and update the Puppet LBs
 Then I deploy initial manifests
 And I wait for bootstrap to complete
 Then I remove the bootstrap node

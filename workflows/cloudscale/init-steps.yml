@@ -762,7 +762,7 @@ spells:
 
     env -i "kubeconfig_path=${installer_dir}/auth/kubeconfig" >> "$OUTPUT"
 
-- match: And I provision the bootstrap node
+- match: And I provision the bootstrap node and update the Puppet LBs
   description: |-
     This step provisions the bootstrap node for the Cloudscale OpenShift cluster using Terraform.
   inputs:
@@ -957,7 +957,7 @@ spells:
       --dynamic-fact openshiftVersion.Major=${INPUT_image_major} \
       --dynamic-fact openshiftVersion.Minor=${INPUT_image_minor}
 
-- match: And I provision the control plane
+- match: And I provision the control plane and update the Puppet LBs
   description: |-
     This step provisions the control plane nodes with Terraform.
   inputs:
