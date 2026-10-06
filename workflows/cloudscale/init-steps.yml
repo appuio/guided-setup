@@ -395,7 +395,7 @@ spells:
       ${INPUT_commodore_cluster_id}.yml
 
     if [ "$INPUT_cloudscale_token_floaty" == "none" ]; then
-      echo "Configuring cloudscale cluster wihtout Puppet LBs"
+      echo "Configuring cloudscale cluster without Puppet LBs"
       yq eval -i ".parameters.openshift4_terraform.terraform_variables.enable_api_lbaas = true" \
         ${INPUT_commodore_cluster_id}.yml
       yq eval -i ".parameters.openshift4_terraform.terraform_variables.enable_cloudscale_router = true" \
