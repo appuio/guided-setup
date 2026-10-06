@@ -1,11 +1,11 @@
 Given I have all prerequisites installed
-And I download the `openshift-install` binary for version "4.21"
+And I download the `openshift-install` binary for version "4.22"
 And a lieutenant cluster
 And a Keycloak service
 And a cloudscale API token
 And a personal VSHN GitLab access token
 And basic cluster information
-Then I download the OpenShift image for version "4.21.0"
+Then I download the OpenShift image for version "4.22.0"
 And I set up required S3 buckets
 And I import the image in Cloudscale
 Then I set secrets in Vault
