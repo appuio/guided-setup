@@ -110,6 +110,7 @@ spells:
     until kubectl wait --for=condition=Succeeded upgradejob -l "upgradeconfig/name=first" -n appuio-openshift-upgrade-controller 2>/dev/null
     do
       oc get clusterversion | grep -v NAME
+      sleep 30
     done
 
     echo "#  Deleting initial UpgradeConfig ..."

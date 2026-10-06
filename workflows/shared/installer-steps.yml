@@ -27,8 +27,61 @@ spells:
     fi
 
     rm -f openshift-install-linux.tar.gz
-    echo "Downloading openshift-install for version ${MATCH_ocp_version} ..."
-    curl -LO https://mirror.openshift.com/pub/openshift-v4/clients/ocp/stable-${MATCH_ocp_version}/openshift-install-linux.tar.gz
+    echo -n "Determining latest patch version for ${MATCH_ocp_version} ... "
+    # NOTE(sg): The OpenShift channel graph API returns a JSON object with the
+    # following shape:
+    #
+    # {
+    #   nodes: [
+    #     {
+    #       version: "MAJOR.MINOR.PATCH",
+    #       ...
+    #     },
+    #     ...
+    #   ],
+    #   edges: [
+    #     [from_index, to_index],
+    #     ...
+    #   ],
+    #   ...
+    # }
+    #
+    # where from_index and to_index for each edges entry are indices into the
+    # `nodes` list. Each entry of `edges` represents a possible upgrade path.
+    ocp_graph=$(curl -fsSL "https://api.openshift.com/api/upgrades_info/v1/graph?channel=stable-${MATCH_ocp_version}&arch=amd64")
+    # This jq query filters the nodes list by our target minor version, splits
+    # the version field (so it will be sorted numerically for `max`) and joins
+    # the result of max with dots to return the latest patch version that's
+    # available on the stable channel.
+    latest_version=$(jq -n -r --argjson g "$ocp_graph" --arg minor "${MATCH_ocp_version}" \
+      '[ $g.nodes[] | select(.version | test($minor)) | .version ]
+       | map(split(".") | map(tonumber))
+       | max | join(".")')
+    echo "${latest_version}"
+
+    echo -n "Determining latest patch version which can be upgraded to ${latest_version} ... "
+    # This jq query takes the latest patch version that's available on the
+    # stable channel and finds the index of that patch version's entry in the
+    # nodes list. Afterwards the query finds all edges which point to the
+    # latest patch version, extracts the version of edge's origin, and returns
+    # the highest patch version that has an upgrade edge to the latest patch
+    # version.
+    prev_version=$(jq -n -r --argjson g "$ocp_graph" --arg latest "$latest_version" \
+      '$g.nodes
+       | to_entries[]
+       | select(.value.version==$latest)
+       | .key as $curr_index
+       | [
+         $g.edges[]
+         | select(.[1]==$curr_index)
+         | $g.nodes[.[0]].version
+         | split(".") | map(tonumber)
+       ] | max | join(".")')
+    echo "${prev_version}"
+
+    echo "Downloading openshift-install for version ${prev_version} ..."
+    curl -LO "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/${prev_version}/openshift-install-linux.tar.gz"
     tar -xf openshift-install-linux.tar.gz openshift-install
+    ./openshift-install version
 
     env -i "openshift_install_bin=$( pwd )/openshift-install" >> "$OUTPUT"
