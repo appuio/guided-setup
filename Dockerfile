@@ -87,7 +87,7 @@ RUN \
 
 # Vault CLI
 # renovate: datasource=github-releases depName=hashicorp/vault
-ARG VAULT_VERSION=v1.21.4
+ARG VAULT_VERSION=v2.1.2
 RUN \
     cd /tmp && \
     wget https://releases.hashicorp.com/vault/${VAULT_VERSION##v}/vault_${VAULT_VERSION##v}_linux_${TARGETARCH}.zip && \
