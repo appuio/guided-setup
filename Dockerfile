@@ -120,7 +120,7 @@ RUN \
 
 # Exo CLI
 # renovate: datasource=github-releases depName=exoscale/cli
-ARG EXO_VERSION=v1.93.0
+ARG EXO_VERSION=v1.102.1
 RUN cd /tmp && \
     wget https://github.com/exoscale/cli/releases/download/${EXO_VERSION}/exoscale-cli_${EXO_VERSION##v}_linux_${TARGETARCH}.deb && \
     wget https://github.com/exoscale/cli/releases/download/${EXO_VERSION}/exoscale-cli_${EXO_VERSION##v}_linux_${TARGETARCH}.deb.sig && \
