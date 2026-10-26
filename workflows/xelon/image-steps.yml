@@ -1,0 +1,80 @@
+spells:
+- match: And I set up required S3 buckets
+  description: |-
+    This step sets up the required S3 buckets for the OpenShift cluster installation.
+
+    It uses the MinIO Client (`mc`) to create the necessary buckets if they do not already exist.
+  inputs:
+  - name: cloudscale_token
+  - name: commodore_cluster_id
+  - name: clsc_region
+  outputs:
+  - name: bucket_user
+    type: sensitive
+  run: |
+    set -euo pipefail
+
+    response=$(curl -sH "Authorization: Bearer ${INPUT_cloudscale_token}" \
+      https://api.cloudscale.ch/v1/objects-users | \
+      jq -e ".[] | select(.display_name == \"${INPUT_commodore_cluster_id}\")" ||:)
+    if [ -z "$response" ]; then
+      echo "Creating Cloudscale S3 user for cluster ID '${INPUT_commodore_cluster_id}'..."
+      response=$(curl -sH "Authorization: Bearer ${INPUT_cloudscale_token}" \
+        -F display_name=${INPUT_commodore_cluster_id} \
+        https://api.cloudscale.ch/v1/objects-users)
+      echo "Created user with id $(echo "$response" | jq -r .id)"
+    else
+      echo "Cloudscale S3 user for cluster ID '${INPUT_commodore_cluster_id}' already exists. id: $(echo "$response" | jq -r .id)"
+    fi
+
+    echo -n "Waiting for S3 credentials to become available ..."
+    until mc alias set \
+      "${INPUT_commodore_cluster_id}" "https://objects.${INPUT_clsc_region}.cloudscale.ch" \
+      "$(echo "$response" | jq -r '.keys[0].access_key')" \
+      "$(echo "$response" | jq -r '.keys[0].secret_key')"
+    do
+      echo -n .
+      sleep 5
+    done
+    echo "OK"
+
+    mc mb --ignore-existing \
+      "${INPUT_commodore_cluster_id}/${INPUT_commodore_cluster_id}-bootstrap-ignition"
+
+    keyid=$(mc alias list ${INPUT_commodore_cluster_id} -json | jq -r .accessKey)
+    export AWS_ACCESS_KEY_ID="${keyid}"
+    secretkey=$(mc alias list ${INPUT_commodore_cluster_id} -json | jq -r .secretKey)
+    export AWS_SECRET_ACCESS_KEY="${secretkey}"
+
+    echo "S3 buckets are set up."
+
+    env -i "bucket_user=$(echo "$response" | jq -c .)" >> "$OUTPUT"
+
+- match: And I import the image into Xelon
+  description: |-
+    This step uploads the Red Hat CoreOS image to Xelon and imports it as a template.
+  inputs:
+  - name: image_path
+  - name: commodore_cluster_id
+  - name: image_major
+  - name: image_minor
+  outputs:
+  - name: rhcos_template_name
+  run: |
+    set -euo pipefail
+
+    rm -rf extracted_image
+    mkdir extracted_image
+    tar -C extracted_image -xf "${INPUT_image_path}"
+
+    echo '##############################################################'
+    echo '#                                                            #'
+    echo '#  Please import the image into Xelon VDC using the Web UI.  #'
+    echo '#                                                            #'
+    echo '##############################################################'
+    echo
+    echo 'You can go to https://vdc.xelon.ch/import-template'
+    echo 'You will find all the files to import in '"$( pwd )/extracted_image"
+    echo
+    echo 'When you are done, record the template name in the outputs.'
+    sleep 2

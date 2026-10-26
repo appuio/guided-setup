@@ -1,0 +1,529 @@
+spells:
+- match: Given I have all prerequisites installed
+  description: |-
+    This step checks if all necessary prerequisites are installed on your system,
+    including 'yq' (version 4 or higher, by Mike Farah) and 'oc' (OpenShift CLI).
+  run: |
+    set -euo pipefail
+    echo "TODO: requirements are copied from cloudscale, please update!"
+    echo
+    echo "Checking prerequisites..."
+
+    if which yq >/dev/null 2>&1 ; then { echo "✅ yq is installed."; } ; else { echo "❌ yq is not installed. Please install yq to proceed."; exit 1; } ; fi
+    if yq --version | grep -E 'version v[4-9]\.' | grep 'mikefarah' >/dev/null 2>&1 ; then { echo "✅ yq by mikefarah version 4 or higher is installed."; } ; else { echo "❌ yq version 4 or higher is required. Please upgrade yq to proceed."; exit 1; } ; fi
+
+    if which jq >/dev/null 2>&1 ; then { echo "✅ jq is installed."; } ; else { echo "❌ jq is not installed. Please install jq to proceed."; exit 1; } ; fi
+
+    if which oc >/dev/null 2>&1 ; then { echo "✅ oc (OpenShift CLI) is installed."; } ; else { echo "❌ oc (OpenShift CLI) is not installed. Please install oc to proceed."; exit 1; } ; fi
+
+    if which vault >/dev/null 2>&1 ; then { echo "✅ vault (HashiCorp Vault) is installed."; } ; else { echo "❌ vault (HashiCorp Vault) is not installed. Please install vault to proceed."; exit 1; } ; fi
+
+    if which curl >/dev/null 2>&1 ; then { echo "✅ curl is installed."; } ; else { echo "❌ curl is not installed. Please install curl to proceed."; exit 1; } ; fi
+
+    if which docker >/dev/null 2>&1 ; then { echo "✅ docker is installed."; } ; else { echo "❌ docker is not installed. Please install docker to proceed."; exit 1; } ; fi
+
+    if which glab >/dev/null 2>&1 ; then { echo "✅ glab (GitLab CLI) is installed."; } ; else { echo "❌ glab (GitLab CLI) is not installed. Please install glab to proceed."; exit 1; } ; fi
+
+    if which host >/dev/null 2>&1 ; then { echo "✅ host (DNS lookup utility) is installed."; } ; else { echo "❌ host (DNS lookup utility) is not installed. Please install host to proceed."; exit 1; } ; fi
+
+    if which mc >/dev/null 2>&1 ; then { echo "✅ mc (MinIO Client) is installed."; } ; else { echo "❌ mc (MinIO Client) is not installed. Please install mc >= RELEASE.2024-01-18T07-03-39Z to proceed."; exit 1; } ; fi
+    mc_version=$(mc --version | grep -Eo 'RELEASE[^ ]+')
+    if echo "$mc_version" | grep -E 'RELEASE\.202[4-9]-' >/dev/null 2>&1 ; then { echo "✅ mc version ${mc_version} is sufficient."; } ; else { echo "❌ mc version ${mc_version} is insufficient. Please upgrade mc to >= RELEASE.2024-01-18T07-03-39Z to proceed."; exit 1; } ; fi
+
+    if which aws >/dev/null 2>&1 ; then { echo "✅ aws (AWS CLI) is installed."; } ; else { echo "❌ aws (AWS CLI) is not installed. Please install aws to proceed. Our recommended installer is uv: 'uv tool install awscli'"; exit 1; } ; fi
+
+    if which restic >/dev/null 2>&1 ; then { echo "✅ restic (Backup CLI) is installed."; } ; else { echo "❌ restic (Backup CLI) is not installed. Please install restic to proceed."; exit 1; } ; fi
+
+    if which emergency-credentials-receive >/dev/null 2>&1 ; then { echo "✅ emergency-credentials-receive (Cluster emergency access helper) is installed."; } ; else { echo "❌ emergency-credentials-receive is not installed. Please install it from https://github.com/vshn/emergency-credentials-receive ."; exit 1; } ; fi
+
+    if which commodore >/dev/null 2>&1 ; then { echo "✅ commodore (Project Syn) is installed."; } ; else { echo "❌ commodore (Project Syn) is not installed. Please install it with 'uv tool install syn-commodore && commodore tool install --missing' ."; exit 1; } ; fi
+
+    echo "TODO: requirements are copied from cloudscale, please update!"
+    echo "✅ All prerequisites are met."
+- match: And Cloudscale API tokens
+  inputs:
+  - name: cloudscale_token
+    type: sensitive
+    description: |-
+      Cloudscale API token with read+write permissions.
+
+      Used for the ignition bucket
+      EVENTUALLY we'll want to move to using Xelon's S3 for this
+  description: |-
+    Create 1 new cloudscale API tokens with read+write permissions and name them
+    {{ .commodore_cluster_id }} and {{ .commodore_cluster_id }}_floaty in a random test cloudscale project
+
+    This step currently does not validate whether the tokens have write permission.
+  run: |
+    set -euo pipefail
+    if [[ $( curl -sH "Authorization: Bearer ${INPUT_cloudscale_token}" https://api.cloudscale.ch/v1/flavors -o /dev/null -w"%{http_code}" ) != 200 ]]
+    then
+      echo "Cloudscale token not valid!"
+      exit 1
+    fi
+- match: And Xelon API tokens
+  inputs:
+  - name: xelon_token
+    type: sensitive
+    description: |-
+      Xelon API token with read+write permissions.
+
+      Go to https://vdc.xelon.ch/user-account and click "Add Service"
+  - name: xelon_client_id
+    type: sensitive
+    description: |-
+      Xelon API client ID
+
+      You receive this when you create the service token.
+  description: |-
+    Create 1 new Xelon Service Token for your account.
+
+    This step currently does not validate whether the tokens have write permission.
+  run: |
+    set -euo pipefail
+    if [[ $( curl -sH "Authorization: Bearer ${INPUT_xelon_token}" -H"X-User-Id: $INPUT_xelon_client_id" https://hq.xelon.ch/api/service/tenants -o /dev/null -w"%{http_code}" ) != 200 ]]
+    then
+      echo "Xelon token not valid!"
+      exit 1
+    fi
+
+
+- match: Then I configure the OpenShift installer
+  description: |-
+    This step configures the OpenShift installer for the Xelon cluster by generating
+    the necessary installation files using Commodore.
+  inputs:
+  - name: commodore_cluster_id
+  - name: commodore_tenant_id
+  - name: base_domain
+  - name: cluster_domain
+  - name: vault_address
+  - name: vault_login_method
+  - name: redhat_pull_secret
+  - name: clsc_region
+  - name: bucket_user
+  - name: cloudscale_token
+  - name: openshift_install_bin
+  outputs:
+  - name: ignition_bootstrap
+  - name: ssh_public_key_path
+  run: |
+    set -euo pipefail
+
+    openshift-install() {
+      "${INPUT_openshift_install_bin}" "${@}"
+    }
+
+    export VAULT_ADDR="${INPUT_vault_address}"
+    vault login -method="${INPUT_vault_login_method}"
+
+    ssh_private_key="$(pwd)/ssh_${INPUT_commodore_cluster_id}"
+    ssh_public_key="${ssh_private_key}.pub"
+
+    env -i "ssh_public_key_path=$ssh_public_key" >> "$OUTPUT"
+
+    if vault kv get -format=json clusters/kv/${INPUT_commodore_tenant_id}/${INPUT_commodore_cluster_id}/xelon/ssh >/dev/null 2>&1; then
+      echo "SSH keypair for cluster ${INPUT_commodore_cluster_id} already exists in Vault, skipping generation."
+
+      vault kv get -format=json clusters/kv/${INPUT_commodore_tenant_id}/${INPUT_commodore_cluster_id}/xelon/ssh | \
+        jq -r '.data.data.private_key|@base64d' > "${ssh_private_key}"
+
+      chmod 600 "${ssh_private_key}"
+      ssh-keygen -f "${ssh_private_key}" -y > "${ssh_public_key}"
+
+    else
+      echo "Generating new SSH keypair for cluster ${INPUT_commodore_cluster_id}."
+
+      ssh-keygen -C "vault@${INPUT_commodore_cluster_id}" -t ed25519 -f "$ssh_private_key" -N ''
+
+      base64_no_wrap='base64'
+      if [[ "$OSTYPE" == "linux"* ]]; then
+        base64_no_wrap='base64 --wrap 0'
+      fi
+
+      # vault kv put clusters/kv/${INPUT_commodore_tenant_id}/${INPUT_commodore_cluster_id}/xelon/ssh \
+      #   private_key="$(cat "$ssh_private_key" | eval "$base64_no_wrap")"
+    fi
+
+    echo Adding SSH private key to ssh-agent...
+    echo You might need to start the ssh-agent first using: eval "\$(ssh-agent)"
+    echo ssh-add "$ssh_private_key"
+    ssh-add "$ssh_private_key"
+
+    installer_dir="$(pwd)/target"
+    rm -rf "${installer_dir}"
+    mkdir -p "${installer_dir}"
+
+    cat > "${installer_dir}/install-config.yaml" <<EOF
+    apiVersion: v1
+    metadata:
+      name: ${INPUT_commodore_cluster_id}
+    baseDomain: ${INPUT_base_domain}
+    platform:
+      none: {}
+    networking:
+      networkType: Cilium
+    pullSecret: |
+      ${INPUT_redhat_pull_secret}
+    sshKey: "$(cat "$ssh_public_key")"
+    EOF
+
+    echo Running OpenShift installer to create manifests...
+    openshift-install --dir "${installer_dir}" create manifests
+
+    echo Copying Cilium OLM manifests...
+    # TODO(aa) Do this properly with Syn-rendered manifests
+    for f in "${GANDALF_SPELLBOOK_DIR}"/cilium/[a-z]*; do
+      cp "$f" "${installer_dir}/manifests/cilium_$(basename "$f")"
+    done
+
+    # Fix API url to correspond to cluster domain
+    export API_INT="api.${INPUT_cluster_domain}"
+    for f in "${GANDALF_SPELLBOOK_DIR}"/cilium/subscription* "${GANDALF_SPELLBOOK_DIR}"/cilium/ciliumconfig*; do
+      cat "$f" | envsubst > "${installer_dir}/manifests/cilium_$(basename "$f")"
+    done
+
+    
+    echo "CILIUMCONFIG:"
+    cat "${installer_dir}"/manifests/cilium_ciliumconfig*
+    echo
+    echo "SUBSCRIPTION:"
+    cat "${installer_dir}"/manifests/cilium_subscription*
+    echo
+
+    # shellcheck disable=2016
+    # We don't want the shell to execute network.operator.openshift.io as a
+    # command, so we need single quotes here.
+    echo 'Generating initial `network.operator.openshift.io` resource...'
+    yq '{
+    "apiVersion": "operator.openshift.io/v1",
+    "kind": "Network",
+    "metadata": {
+      "name": "cluster"
+    },
+    "spec": {
+      "deployKubeProxy": false,
+      "clusterNetwork": .spec.clusterNetwork,
+      "externalIP": {
+        "policy": {}
+      },
+      "networkType": "Cilium",
+      "serviceNetwork": .spec.serviceNetwork
+    }}' "${installer_dir}/manifests/cluster-network-02-config.yml" \
+    > "${installer_dir}/manifests/cilium_cluster-network-operator.yaml"
+
+    gen_cluster_domain=$(yq e '.spec.baseDomain' \
+      "${installer_dir}/manifests/cluster-dns-02-config.yml")
+    if [ "$gen_cluster_domain" != "$INPUT_cluster_domain" ]; then
+      echo -e "\033[0;31mGenerated cluster domain doesn't match expected cluster domain: Got '$gen_cluster_domain', want '$INPUT_cluster_domain'\033[0;0m"
+      sleep 1
+      exit 1
+    else
+      echo -e "\033[0;32mGenerated cluster domain matches expected cluster domain.\033[0;0m"
+      sleep 1
+    fi
+
+    echo Running OpenShift installer to create ignition configs...
+    openshift-install --dir "${installer_dir}" \
+      create ignition-configs
+
+    mc alias set \
+      "${INPUT_commodore_cluster_id}" "https://objects.${INPUT_clsc_region}.cloudscale.ch" \
+      "$(echo "$INPUT_bucket_user" | jq -r '.keys[0].access_key')" \
+      "$(echo "$INPUT_bucket_user" | jq -r '.keys[0].secret_key')"
+
+    mc cp "${installer_dir}/bootstrap.ign" "${INPUT_commodore_cluster_id}/${INPUT_commodore_cluster_id}-bootstrap-ignition/"
+
+    ignition_bootstrap=$(mc share download \
+      --json --expire=24h \
+      "${INPUT_commodore_cluster_id}/${INPUT_commodore_cluster_id}-bootstrap-ignition/bootstrap.ign" | jq -r '.share')
+
+    env -i "ignition_bootstrap=$ignition_bootstrap" >> "$OUTPUT"
+
+    echo "✅ OpenShift installer configured successfully."
+
+- match: Then I prepare for terraform
+  description: |-
+    This step creates the terraform environment
+  inputs:
+  - name: commodore_cluster_id
+  - name: ignition_bootstrap
+  - name: xelon_token
+  - name: xelon_client_id
+  - name: csp_region
+  - name: base_domain
+  - name: rhcos_template_name
+  - name: terraform_git_commit
+    description: | 
+      Git ref for the terraform repo - if you don't know what to use, use master
+      See https://github.com/appuio/terraform-openshift4-xelon
+  - name: ssh_public_key_path
+  run: |
+    set -euo pipefail
+
+    mkdir -p terraform
+    installer_dir="$(pwd)/target"
+
+    sshsig="$( cat "${INPUT_ssh_public_key_path}" )"
+    jq -r '.ignition.security.tls.certificateAuthorities[0].source' "${installer_dir}/master.ign" | awk -F ',' '{ print $2 }' | base64 --decode > ignition.ca
+    ignitionca="$( awk '{printf "%s\\n", $0}' ignition.ca  )"
+    cat <<EOF > terraform/main.tf.json
+    {
+      "module": {
+        "cluster": {
+          "base_domain": "${INPUT_base_domain}",
+          "cluster_id": "${INPUT_commodore_cluster_id}",
+          "xelon_cloud": "${INPUT_csp_region}",
+          "xelon_token": "\${var.xelon_token}",
+          "xelon_client_id": "\${var.xelon_client_id}",
+          "ignition_bootstrap": "\${var.ignition_bootstrap}",
+          "ignition_ca": "${ignitionca}",
+          "rhcos_template_name": "${INPUT_rhcos_template_name}",
+          "source": "git::https://github.com/appuio/terraform-openshift4-xelon.git//?ref=${INPUT_terraform_git_commit}",
+          "ssh_key": "${sshsig}"
+        }
+      }
+    }
+    EOF
+
+    cat <<"EOF" > terraform/variables.tf.json
+    {
+      "variable": {
+        "ignition_bootstrap": {
+          "default": ""
+        },
+        "xelon_token": {
+          "default": ""
+        },
+        "xelon_client_id": {
+          "default": ""
+        }
+      }
+    }
+    EOF
+
+    cat <<"EOF" > terraform/outputs.tf.json
+    {
+      "output": {
+        "api_ip": {
+          "value": "${module.cluster.api_ip}"
+        },
+        "ingress_ip": {
+          "value": "${module.cluster.ingress_ip}"
+        },
+        "cluster_dns": {
+          "value": "${module.cluster.dns_entries}"
+        },
+        "subnet_uuid": {
+          "value": "${module.cluster.network_id}"
+        }
+      }
+    }
+    EOF
+    
+    cat <<"EOF" > terraform/terraform.sh
+    #!/bin/sh
+    # Intended to run as root, this script ensures that the non-privileged user
+    # that we want to run as in the end can use git-https and curl.
+    # TODO: build custom Terraform CI image based on GitLab's image.
+    adduser -D -s /bin/sh -u "${REAL_UID}" -h /tf terraform
+    apk add --no-cache curl >/dev/null 2>&1
+    export GIT_ASKPASS=/tf/git-askpass.sh
+    # Note: busybox `su` can't directly execute a binary, so we use the secondary
+    # script which only does `exec terraform`.
+    su -p terraform /tf/tf.sh -- "$@"
+    EOF
+    chmod +x terraform/terraform.sh
+
+    cat <<"EOF" > terraform/tf.sh
+    #!/bin/sh
+    exec terraform "$@"
+    EOF
+    chmod +x terraform/tf.sh
+
+- match: Then I create the bootstrap node
+  description: |-
+    This step provisions the bootstrap node for the Xelon OpenShift cluster using Terraform.
+  inputs:
+  - name: xelon_token
+  - name: xelon_client_id
+  - name: ignition_bootstrap
+  run: |
+    set -euo pipefail
+
+    installer_dir="$(pwd)/target"
+
+    cat <<EOF > terraform.env
+    TF_VAR_xelon_token=${INPUT_xelon_token}
+    TF_VAR_xelon_client_id=${INPUT_xelon_client_id}
+    TF_VAR_ignition_bootstrap=${INPUT_ignition_bootstrap}
+    EOF
+    tf_image="registry.gitlab.com/gitlab-org/terraform-images/releases/terraform"
+    tf_tag='1.5.7'
+
+    echo "Using Terraform image: ${tf_image}:${tf_tag}"
+
+    base_dir=$(pwd)
+    terraform() {
+      touch .terraformrc
+      docker run --rm -e REAL_UID="$(id -u)" -e TF_CLI_CONFIG_FILE=/tf/.terraformrc --env-file "${base_dir}/terraform.env" -w /tf -v "$(pwd):/tf" --ulimit memlock=-1 "${tf_image}:${tf_tag}" /tf/terraform.sh "${@}"
+    }
+
+
+    pushd terraform
+
+    terraform init
+
+    cat > override.tf <<EOF
+    module "cluster" {
+      bootstrap_count          = 1
+      master_count             = 0
+      infra_count              = 0
+      worker_count             = 0
+      additional_worker_groups = {}
+    }
+    EOF
+
+    # NOTE(aa): Due to a provider bug, this is expected to "fail successfully"
+    # TODO properly safeguard against actual errors
+    terraform apply -auto-approve || true
+
+    echo
+    echo "IF THE ERROR IS ANYTHING OTHER THAN 'Provider returned invalid result'"
+    echo "THEN CANCEL EXECUTION NOW"
+    echo
+    echo "Continuing in 5 ..."
+    sleep 5
+
+    terraform untaint module.cluster.xelon_device.bootstrap[0] || true
+
+    # NOTE(aa): second apply is needed to properly provision the load balancers after node IPs are known
+    terraform apply -auto-approve
+
+    popd
+
+    echo
+    echo '#############################################################@@@@@@@@#'
+    echo '#                                                                    #'
+    echo '#  Now please add the DNS records displayed above to VSHN zonefiles  #'
+    echo '#                                                                    #'
+    echo '######################################################################'
+    echo
+    sleep 3
+
+- match: Then I fix the load balancer
+  description: |-
+    In this step, manually configure the forwarding rules on the load balancers.
+  inputs:
+  - name: xelon_token
+  - name: xelon_client_id
+  - name: ignition_bootstrap
+  outputs:
+  - name: kubeconfig_path
+  run: |
+    set -euo pipefail
+
+    installer_dir="$(pwd)/target"
+    echo '###########################################################@##########'
+    echo '#                                                                    #'
+    echo '#  Please find the new API load balancer in the  Web UI.             #'
+    echo '#  Add a new forwarding rule for port 6443 pointing to the bootstrap #'
+    echo '#  node.                                                             #'
+    echo '#  Add a second forwarding rule for port 22623 pointing to the       #'
+    echo '#  bootstrap node as well.                                           #'
+    echo '#                                                                    #'
+    echo '###################################@@@@@@@@@@@########################'
+    echo
+    echo 'You can go to https://vdc.xelon.ch/networking/load-balancer'
+    echo
+
+
+    echo -n "Waiting for Bootstrap API to become available .."
+    API_URL=$(yq e '.clusters[0].cluster.server' "${installer_dir}/auth/kubeconfig")
+    while ! curl --connect-timeout 1 "${API_URL}/healthz" -k &>/dev/null; do
+      echo -n "."
+      sleep 5
+    done && echo "✅ API is up"
+    env -i "kubeconfig_path=${installer_dir}/auth/kubeconfig" >> "$OUTPUT"
+
+- match: Then I create the control plane nodes
+  description: |-
+    This step provisions the control plane nodes for the Xelon OpenShift cluster using Terraform.
+  inputs:
+  - name: xelon_token
+  - name: xelon_client_id
+  - name: ignition_bootstrap
+  - name: cluster_domain
+  - name: kubeconfig_path
+  run: |
+    set -euo pipefail
+
+    installer_dir="$(pwd)/target"
+
+    cat <<EOF > terraform.env
+    TF_VAR_xelon_token=${INPUT_xelon_token}
+    TF_VAR_xelon_client_id=${INPUT_xelon_client_id}
+    TF_VAR_ignition_bootstrap=${INPUT_ignition_bootstrap}
+    EOF
+    tf_image="registry.gitlab.com/gitlab-org/terraform-images/releases/terraform"
+    tf_tag='1.5.7'
+
+    echo "Using Terraform image: ${tf_image}:${tf_tag}"
+
+    base_dir=$(pwd)
+    terraform() {
+      touch .terraformrc
+      docker run --rm -e REAL_UID="$(id -u)" -e TF_CLI_CONFIG_FILE=/tf/.terraformrc --env-file "${base_dir}/terraform.env" -w /tf -v "$(pwd):/tf" --ulimit memlock=-1 "${tf_image}:${tf_tag}" /tf/terraform.sh "${@}"
+    }
+
+
+    pushd terraform
+
+    terraform init
+
+    cat > override.tf <<EOF
+    module "cluster" {
+      bootstrap_count          = 1
+      infra_count              = 0
+      worker_count             = 0
+      additional_worker_groups = {}
+    }
+    EOF
+
+    # NOTE(aa): Due to a provider bug, this is expected to "fail successfully"
+    # TODO properly safeguard against actual errors
+    terraform apply -auto-approve || true
+
+    echo
+    echo "IF THE ERROR IS ANYTHING OTHER THAN 'Provider returned invalid result'"
+    echo "THEN CANCEL EXECUTION NOW"
+    echo
+    sleep 3
+
+    terraform untaint module.cluster.module.master.xelon_device.node[0] || true
+    terraform untaint module.cluster.module.master.xelon_device.node[1] || true
+    terraform untaint module.cluster.module.master.xelon_device.node[2] || true
+
+    # NOTE(aa) Due to the "invalid result" bug we need to run TF again to update the LB
+    terraform apply -auto-approve
+
+    echo '###########################################################@##########'
+    echo '#                                                                    #'
+    echo '#  Please add the etcd DNS entries to VSHN Zonefiles.                #'
+    echo '#  Sorry I am lazy, find the IP addresses yourself ;)                #'
+    echo '#                                                                    #'
+    echo '###################################@@@@@@@@@@@########################'
+    echo
+    sleep 3
+
+    while ! (host "etcd-0.${INPUT_cluster_domain}")
+    do
+      sleep 15
+    done
+
+    export KUBECONFIG="${INPUT_kubeconfig_path}"
+
+    echo "Waiting for masters to become ready ..."
+    kubectl wait --for create --timeout=600s node -l node-role.kubernetes.io/master
+    kubectl wait --for condition=ready --timeout=600s node -l node-role.kubernetes.io/master
+    popd
