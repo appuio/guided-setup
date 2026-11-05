@@ -535,7 +535,7 @@ spells:
 
 - match: Then I provision the loadbalancers
   description: |-
-    This step provisions the load balancers for the Cloudscale OpenShift cluster using Terraform.
+    This step provisions the puppet load balancers for the Cloudscale OpenShift cluster using Terraform.
   inputs:
   - name: cloudscale_token
   - name: cloudscale_token_floaty
@@ -605,7 +605,7 @@ spells:
       additional_worker_groups = {}
     }
     EOF
-    terraform apply -auto-approve -target "module.cluster.module.lb.module.hiera"
+    terraform apply -auto-approve -target "module.cluster.module.lb[0].module.hiera"
 
     echo "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@"
     echo "@                                                                                       @"
@@ -650,8 +650,8 @@ spells:
     echo "✅ API record present"
     rm ../../../dns.txt
 
-    lb1=$(terraform state show "module.cluster.module.lb.cloudscale_server.lb[0]" | grep fqdn | awk '{print $2}' | tr -d ' "\r\n')
-    lb2=$(terraform state show "module.cluster.module.lb.cloudscale_server.lb[1]" | grep fqdn | awk '{print $2}' | tr -d ' "\r\n')
+    lb1=$(terraform state show "module.cluster.module.lb[0].cloudscale_server.lb[0]" | grep fqdn | awk '{print $2}' | tr -d ' "\r\n')
+    lb2=$(terraform state show "module.cluster.module.lb[0].cloudscale_server.lb[1]" | grep fqdn | awk '{print $2}' | tr -d ' "\r\n')
 
     echo "Loadbalancer FQDNs: $lb1 , $lb2"
 
