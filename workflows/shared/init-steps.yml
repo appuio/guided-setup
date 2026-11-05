@@ -173,7 +173,7 @@ spells:
 
 - match: And I configure Terraform for team "(?P<team_name>[^"]+)"
   description: |-
-    This step configures Terraform the Commodore rendered terraform configuration.
+    This step configures the Commodore rendered terraform configuration.
   inputs:
   - name: commodore_api_url
   - name: commodore_cluster_id
