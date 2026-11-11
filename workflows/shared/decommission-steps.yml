@@ -43,6 +43,8 @@ spells:
     description: |-
       Please confirm the commodore cluster ID of the cluster you wish to delete.
 
+      Cluster ID: {{ .commodore_cluster_id }}
+
       Confirm this cluster ID according to the 4-eye principle. You and one colleague should agree on the cluster that is to be deleted.
   run: |
     set -euo pipefail
