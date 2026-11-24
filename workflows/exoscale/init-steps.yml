@@ -381,6 +381,7 @@ spells:
   - name: image_minor
   - name: rhcos_template
   - name: ssh_public_key_path
+  - name: ignition_bootstrap
   run: |
     set -euo pipefail
 
@@ -394,6 +395,9 @@ spells:
       ${INPUT_commodore_cluster_id}.yml
 
     yq eval -i ".parameters.openshift4_terraform.terraform_variables.rhcos_template = \"${INPUT_rhcos_template}\"" ${CLUSTER_ID}.yml
+
+    yq eval -i ".parameters.openshift4_terraform.terraform_variables.bootstrap_bucket = null" ${CLUSTER_ID}.yml
+    yq eval -i ".parameters.openshift4_terraform.terraform_variables.ignition_bootstrap = \"${INPUT_ignition_bootstrap}\"" ${CLUSTER_ID}.yml
 
     echo "Commit changes"
     git commit -a -m "Set Exoscale specific values in cluster ${CLUSTER_ID}"

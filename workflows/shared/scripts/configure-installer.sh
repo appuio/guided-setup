@@ -181,10 +181,11 @@ EOF
       --json --expire=24h \
       "${INPUT_commodore_cluster_id}/${INPUT_commodore_cluster_id}-bootstrap-ignition/bootstrap.ign" | jq -r '.share')
 
-    env -i "ignition_bootstrap=$ignition_bootstrap" >> "$OUTPUT"
   elif [ "$cloud_provider" == "exoscale" ]; then
-    exo storage upload "${installer_dir}/bootstrap.ign" "sos://${INPUT_commodore_cluster_id}-bootstrap" --acl public-read
+    exo storage upload "${installer_dir}/bootstrap.ign" "sos://${INPUT_commodore_cluster_id}-bootstrap" --acl private
+    ignition_bootstrap=$(exo storage presign "sos://${INPUT_commodore_cluster_id}-bootstrap/bootstrap.ign" --expires "24h" --method "get")
   fi
+  env -i "ignition_bootstrap=$ignition_bootstrap" >> "$OUTPUT"
 
   echo "✅ OpenShift installer configured successfully."
 }
