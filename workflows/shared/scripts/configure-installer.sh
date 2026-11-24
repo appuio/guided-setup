@@ -56,6 +56,28 @@ configure_installer() {
   rm -rf "${installer_dir}"
   mkdir -p "${installer_dir}"
 
+  echo "Adding Cilium registry mirror pull secret to cluster pull secret"
+  if [[ "${INPUT_vault_address}" == "https://vault-prod.syn.vshn.net"* ]]; then
+    prefix=""
+  elif [[ "${INPUT_vault_address}" == "https://vault-int.syn.vshn.net"* ]]; then
+    prefix="int_"
+  elif [[ "${INPUT_vault_address}" == "https://vault-dev.syn.vshn.net"* ]]; then
+    prefix="dev_"
+  else
+    echo "Unknown Vault instance ${INPUT_vault_address}, Cilium registry mirror pull secret may be incorrect."
+    prefix=""
+  fi
+  registry_password=$(vault kv get -format=json \
+    "clusters/kv/${INPUT_commodore_tenant_id}/${INPUT_commodore_cluster_id}/steward" \
+    | jq -r '.data.data.token' | tr -d '\n' | sha256sum | cut -d ' ' -f1)
+  pull_secret=$(jq -r -n -c \
+    --argjson pull "${INPUT_redhat_pull_secret}" \
+    --arg registry_password "$registry_password" \
+    --arg cluster_id "${prefix}${INPUT_commodore_cluster_id}" \
+    '{
+      "auths": $pull.auths + {"icr-mirror.vshn.net":{"auth":"\($cluster_id):\($registry_password)"|@base64}}
+    }')
+
   cat > "${installer_dir}/install-config.yaml" <<EOF
   apiVersion: v1
   metadata:
@@ -68,7 +90,7 @@ configure_installer() {
   networking: 
     networkType: Cilium
   pullSecret: |
-    ${INPUT_redhat_pull_secret}
+    ${pull_secret}
   sshKey: "$(cat "$ssh_public_key")"
 EOF
 
@@ -104,6 +126,14 @@ EOF
   for f in catalog/manifests/cilium/olm/[a-z]*; do
     cp "$f" "${installer_dir}/manifests/cilium_$(basename "$f")"
   done
+
+  cilium_mirror_config=catalog/manifests/cilium/80_enterprise_isovalent_registry_mirror_config.yaml
+  if [ -f "$cilium_mirror_config" ]; then
+    echo "Copying Cilium registry mirror manifests..."
+    yq --no-doc -s \
+      "\"${installer_dir}/manifests/cilium_\" + (.kind|downcase)" \
+      "$cilium_mirror_config"
+  fi
 
   # shellcheck disable=2016
   # We don't want the shell to execute network.operator.openshift.io as a
