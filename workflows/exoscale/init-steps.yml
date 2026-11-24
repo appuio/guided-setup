@@ -615,6 +615,19 @@ spells:
     fi
 
     terraform apply -auto-approve
+    terraform output -raw cluster_dns > ../../../dns.txt
+    echo "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@"
+    echo "@                                                                                       @"
+    echo "@  Please add the DNS records shown in the Terraform output to your DNS provider.       @"
+    echo "@  Most probably in https://git.vshn.net/vshn/vshn_zonefiles                            @"
+    echo "@                                                                                       @"
+    echo "@  If terminal selection does not work the entries can also be copied from              @"
+    echo "@    dns.txt                                                                            @"
+    echo "@                                                                                       @"
+    echo "@  Sleeping 120 seconds before proceeding                                               @"
+    echo "@                                                                                       @"
+    echo "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@"
+    sleep 120
 
     cat > override.tf <<EOF
     module "cluster" {
@@ -647,24 +660,15 @@ spells:
     done
 
     terraform apply -auto-approve
-    terraform output -raw cluster_dns > ../../../dns.txt
-    echo "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@"
-    echo "@                                                                                       @"
-    echo "@  Please add the DNS records shown in the Terraform output to your DNS provider.       @"
-    echo "@  Most probably in https://git.vshn.net/vshn/vshn_zonefiles                            @"
-    echo "@                                                                                       @"
-    echo "@  If terminal selection does not work the entries can also be copied from              @"
-    echo "@    dns.txt                                                                            @"
-    echo "@                                                                                       @"
-    echo "@  Waiting for record to propagate...                                                   @"
-    echo "@                                                                                       @"
-    echo "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@"
-    while ! (host "api.${INPUT_cluster_domain}")
+    # NOTE(sg): At this point the DNS changes applied two `terraform apply`s
+    # prior should have propagated.
+    echo "Checking for the cluster API DNS record"
+    while [ "$(dig +short A "api.${INPUT_cluster_domain}")" == "" ]
     do
       sleep 15
     done
     rm ../../../dns.txt
-    
+
     lb1=$(terraform state show "module.cluster.module.lb.exoscale_domain_record.lb[0]" | grep hostname | awk '{print $3}' | tr -d ' "\r\n')
     lb2=$(terraform state show "module.cluster.module.lb.exoscale_domain_record.lb[1]" | grep hostname | awk '{print $3}' | tr -d ' "\r\n')
 
