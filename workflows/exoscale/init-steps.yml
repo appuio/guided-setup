@@ -894,36 +894,6 @@ spells:
     kubectl wait --for condition=ready --timeout=600s node -l node-role.kubernetes.io/master
     popd
 
-- match: Then I deploy initial manifests
-  description: |-
-    This step deploys some manifests required during bootstrap, including
-    cert-manager,  machine-api-provider, machinesets, loadbalancer controller,
-    and ingress loadbalancer.
-  inputs:
-  - name: commodore_api_url
-  - name: vault_address
-  - name: vault_login_method
-  - name: kubeconfig_path
-  run: |
-    set -euo pipefail
-    
-    export COMMODORE_API_URL="${INPUT_commodore_api_url}"
-    export KUBECONFIG="${INPUT_kubeconfig_path}"
-
-    export VAULT_ADDR=${INPUT_vault_address}
-    vault login -method=${INPUT_vault_login_method}
-
-    echo '# Applying cert-manager ... #'
-    kubectl apply -f catalog/manifests/cert-manager/00_namespace.yaml
-    kubectl apply -Rf catalog/manifests/cert-manager/10_cert_manager
-    # shellcheck disable=2046
-    # we need word splitting here
-    kubectl -n syn-cert-manager patch --type=merge \
-      $(kubectl -n syn-cert-manager get deploy -oname) \
-      -p '{"spec":{"template":{"spec":{"tolerations":[{"operator":"Exists"}]}}}}'
-    echo '# Applied cert-manager. #'
-    echo
-
 - match: Then I provision the remaining nodes
   description: |-
     After successful bootstrapping, this step removes the bootstrap node again.
@@ -1092,14 +1062,6 @@ spells:
       echo '# Scheduled ingress controller on infra nodes. #'
       echo
     fi
-
-    echo '# Removing temporary cert-manager tolerations ... #'
-    # shellcheck disable=2046
-    # we need word splitting here
-    kubectl -n syn-cert-manager patch --type=json \
-      $(kubectl -n syn-cert-manager get deploy -oname) \
-      -p '[{"op":"remove","path":"/spec/template/spec/tolerations"}]'
-    echo '# Removed temporary cert-manager tolerations. #'
 
     echo "✅ Initial deployments configured successfully."
 
