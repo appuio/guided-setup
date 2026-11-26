@@ -1026,9 +1026,8 @@ spells:
 - match: And I configure initial deployments
   description: |-
     This step configures some deployments that require manual changes after
-    cluster bootstrap, such as reverting the Cilium patch from earlier, enabling
-    proxy protocol on the Ingress controller, and scheduling the ingress
-    controller on the infrastructure nodes.
+    cluster bootstrap, such enabling proxy protocol on the Ingress controller,
+    and scheduling the ingress controller on the infrastructure nodes.
   inputs:
   - name: commodore_cluster_id
   - name: commodore_api_url
