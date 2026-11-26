@@ -797,6 +797,9 @@ spells:
       sleep 10
     done
 
+    echo "Waiting a couple seconds before running Puppet"
+    sleep 5
+
     ssh "${INPUT_lb_fqdn_1}" sudo puppetctl run
     ssh "${INPUT_lb_fqdn_2}" sudo puppetctl run
 
@@ -1002,6 +1005,9 @@ spells:
     do
       sleep 10
     done
+
+    echo "Waiting a couple seconds before running Puppet"
+    sleep 5
 
     ssh "${INPUT_lb_fqdn_1}" sudo puppetctl run
     ssh "${INPUT_lb_fqdn_2}" sudo puppetctl run
