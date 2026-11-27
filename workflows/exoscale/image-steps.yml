@@ -34,9 +34,14 @@ spells:
     set -euo pipefail
 
     patched_path="${INPUT_image_path%.*}-patched.qcow2"
-    cp "${INPUT_image_path}" "${patched_path}"
-    env -i "patched_image_path=$patched_path" >> "$OUTPUT"
+    if [ ! -f "${patched_path}" ]; then
+      cp "${INPUT_image_path}" "${patched_path}"
+      env -i "patched_image_path=$patched_path" >> "$OUTPUT"
+    fi
 
+    # diff exit code is 0 when images are identical -> we want to tell the
+    # user to patch the image in that case.
+    if diff "${INPUT_image_path}" "${patched_path}"; then
     echo "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@"
     echo "@                                                                                       @"
     echo "@  Please run the following command manually. (This step is not yet automated)          @"
@@ -47,6 +52,9 @@ spells:
     echo
     echo '(If you have some time, feel free to implement automation for this step)'
     sleep 3
+    else
+    echo "downloaded and patched image differ, assuming patch has been applied manually..."
+    fi
 
 - match: And I import the image in Exoscale
   description: |-
@@ -97,8 +105,8 @@ spells:
 
     exo storage delete -f "sos://${INPUT_commodore_cluster_id}-bootstrap/${INPUT_patched_image_path}"
 
+    exo compute instance-template list -v private -z "${INPUT_csp_region}"
+
     export RHCOS_TEMPLATE="rhcos-${RHCOS_VERSION}"
 
     env -i "rhcos_template=$RHCOS_TEMPLATE" >> "$OUTPUT"
-
-    echo "Image import initiated. ⚠️ TODO: Poll for completion."
