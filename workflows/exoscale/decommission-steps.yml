@@ -208,7 +208,7 @@ spells:
   - name: commodore_api_url
   - name: backup_deletion_confirmation
     description: |-
-      Really delete the cluster backup?
+      Really delete the cluster backup for cluster {{ .commodore_cluster_id }} on Lieutenant {{ .commodore_api_url }}?
 
       Type "YES" to delete the cluster backup. With any other value, backup deletion gets skipped.
 
