@@ -123,7 +123,14 @@ EOF
   fi
 
   echo Copying Cilium OLM manifests...
-  for f in catalog/manifests/cilium/olm/[a-z]*; do
+  cilium_manifests="catalog/manifests/cilium/olm/[a-z]*"
+  # shellcheck disable=2086
+  if [ "$(yq eval-all '[.kind=="Deployment"]|any' $cilium_manifests)" == "false" ]; then
+    # shellcheck disable=2016
+    echo 'Cilium clife-controller-manager deployment missing. Double check that `cilium.olm.generate_olm_deployment=true` in the cluster config'
+    exit 1
+  fi
+  for f in $cilium_manifests; do
     cp "$f" "${installer_dir}/manifests/cilium_$(basename "$f")"
   done
 
